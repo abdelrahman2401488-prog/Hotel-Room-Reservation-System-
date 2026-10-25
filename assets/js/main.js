@@ -23,7 +23,9 @@ window.HRS = window.HRS || {};
   HRS.config = {
     baseUrl: document.body.dataset.baseUrl || '',
     pageId: document.body.dataset.page || '',
-    pageRole: document.body.dataset.role || '',
+    // Roles allowed on this page ("" = public), from $pageRoles in PHP
+    pageRoles: (document.body.dataset.roles || '').split(',').map(function (r) { return r.trim(); }).filter(Boolean),
+    hotelName: 'The Developers Hotel',
     currency: 'USD',
     locale: 'en-US'
   };
@@ -182,6 +184,15 @@ window.HRS = window.HRS || {};
 
   HRS.url = {
     param: function (name) { return new URLSearchParams(window.location.search).get(name); },
+    // Current page path relative to the project root, e.g. "guest/book_room.php"
+    current: function () {
+      var depth = (HRS.config.baseUrl.match(/\.\.\//g) || []).length;
+      return window.location.pathname.split('/').slice(-(depth + 1)).join('/');
+    },
+    // Only relative in-project page paths (optionally with a query) are safe redirect targets
+    isSafeRedirect: function (target) {
+      return typeof target === 'string' && /^(?:[a-z_]+\/)?[a-z_]+\.php(?:\?[\w=&%.+-]*)?$/.test(target);
+    },
     // HRS.url.to('guest/book_room.php', { room_id: 3 })
     to: function (path, params) {
       var query = '';
@@ -398,7 +409,42 @@ window.HRS = window.HRS || {};
      Reusable views
      ------------------------------------------------------------------ */
 
+  /* ------------------------------------------------------------------
+     Media: room photo paths + broken-image fallback
+     ------------------------------------------------------------------ */
+
+  HRS.media = {
+    // image_url values are project-root relative paths, data:/blob: URLs
+    // (admin uploads in the demo) or absolute URLs (future CDN/backend).
+    url: function (path) {
+      if (!path) return '';
+      return /^(data:|blob:|https?:)/.test(path) ? path : HRS.config.baseUrl + path;
+    },
+    alt: function (room) {
+      return room.image_alt || (room.title + ' — ' + HRS.format.label(room.room_type) + ' room ' + room.room_number);
+    }
+  };
+
+  // A photo that fails to load is hidden so the styled .room-media
+  // placeholder (gradient + label) shows instead of a broken image icon.
+  document.addEventListener('error', function (event) {
+    var img = event.target;
+    if (img && img.tagName === 'IMG' && img.classList.contains('room-photo')) {
+      img.hidden = true;
+      var media = img.closest('.room-media');
+      if (media) media.classList.add('is-fallback');
+    }
+  }, true);
+
   HRS.views = {
+    // A single room photo inside the gradient placeholder frame
+    photo: function (url, alt, extraClass, label) {
+      return html`<div class="room-media ${extraClass || ''}">
+          ${url ? html`<img class="room-photo" src="${HRS.media.url(url)}" alt="${alt}" loading="lazy" decoding="async" width="1280" height="800">` : ''}
+          ${label ? html`<span class="room-media-label">${label}</span>` : ''}
+        </div>`;
+    },
+
     statusBadge: function (status) {
       return html`<span class="badge status-${status}">${HRS.format.label(status)}</span>`;
     },
@@ -413,9 +459,15 @@ window.HRS = window.HRS || {};
       return html`<span class="rating" role="img" aria-label="${value} out of 5 stars">${'★★★★★'.slice(0, value)}${'☆☆☆☆☆'.slice(0, 5 - value)}</span>`;
     },
 
-    roomMedia: function (room, extraClass) {
+    // Room photo with type label; falls back to the gradient for rooms
+    // without a photo. options: label (string | false), badge, eager
+    roomMedia: function (room, extraClass, options) {
+      options = options || {};
+      var label = options.label === undefined ? HRS.format.label(room.room_type) + ' · Room ' + room.room_number : options.label;
       return html`<div class="room-media room-media-${room.room_type} ${extraClass || ''}">
-          <span class="room-media-label">${HRS.format.label(room.room_type)} &middot; Room ${room.room_number}</span>
+          ${room.image_url ? html`<img class="room-photo" src="${HRS.media.url(room.image_url)}" alt="${HRS.media.alt(room)}" loading="${options.eager ? 'eager' : 'lazy'}" decoding="async" width="1280" height="800">` : ''}
+          ${label ? html`<span class="room-media-label">${label}</span>` : ''}
+          ${options.badge || ''}
         </div>`;
     },
 
@@ -425,10 +477,7 @@ window.HRS = window.HRS || {};
       var amenities = (room.amenities || []).slice(0, 4);
       return html`
         <article class="card card-hover room-card">
-          <div class="room-media room-media-${room.room_type}">
-            <span class="room-media-label">${HRS.format.label(room.room_type)}</span>
-            ${options.badge || ''}
-          </div>
+          ${HRS.views.roomMedia(room, '', { label: HRS.format.label(room.room_type), badge: options.badge })}
           <div class="card-body">
             <h3 class="card-title">${room.title}</h3>
             <ul class="room-meta">
@@ -505,10 +554,37 @@ window.HRS = window.HRS || {};
      ------------------------------------------------------------------ */
 
   var SESSION_KEY = 'hrs_demo_session';
+  var ROLES = ['guest', 'staff', 'admin'];
+
+  function isValidSession(s) {
+    return !!s && typeof s === 'object' && typeof s.user_id === 'number' && ROLES.indexOf(s.role) !== -1 &&
+      typeof s.email === 'string' && typeof s.full_name === 'string';
+  }
 
   HRS.session = {
+    // Returns the demo session, or null. Malformed entries are discarded.
     current: function () {
-      try { return JSON.parse(localStorage.getItem(SESSION_KEY)) || null; } catch (e) { return null; }
+      var session = null;
+      try { session = JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { session = false; } // unreadable entry
+      if (session !== null && !isValidSession(session)) {
+        HRS.session.signOut();
+        return null;
+      }
+      return session;
+    },
+    // Checks the stored session still matches a demo account (e.g. after
+    // "Reset demo data" or manual edits). Resolves to the session or null.
+    verify: function () {
+      var session = HRS.session.current();
+      if (!session) return Promise.resolve(null);
+      var invalid = function () {
+        HRS.session.signOut();
+        HRS.ui.toast('Your demo sign-in was no longer valid and has been cleared.', { type: 'warning' });
+        return null;
+      };
+      return HRS.data.getUser(session.user_id).then(function (user) {
+        return user.email === session.email && user.role === session.role ? session : invalid();
+      }, invalid);
     },
     signIn: function (user) {
       var session = { user_id: user.user_id, full_name: user.full_name, email: user.email, phone: user.phone || '', role: user.role };
@@ -522,10 +598,70 @@ window.HRS = window.HRS || {};
       var user = HRS.session.current();
       return !!user && roles.indexOf(user.role) !== -1;
     },
+    // Landing page per role: admin and staff have separate dashboards
     homeFor: function (role) {
-      return { admin: 'admin/dashboard.php', staff: 'staff/dashboard.php' }[role] || 'guest/my_bookings.php';
+      return { admin: 'admin/dashboard.php', staff: 'staff/dashboard.php', guest: 'guest/my_bookings.php' }[role] || 'index.php';
+    },
+    // Guests may only open their own bookings; staff/admin may open any
+    canAccessReservation: function (reservation) {
+      var user = HRS.session.current();
+      if (!user || !reservation) return false;
+      if (user.role !== 'guest') return true;
+      return String(reservation.user_id) === String(user.user_id) ||
+        String(reservation.guest_email).toLowerCase() === user.email.toLowerCase();
+    },
+    // Renders a "not your booking" state into region and returns true when
+    // the current user may not open this reservation.
+    // BACKEND INTEGRATION: PHP must check ownership (WHERE user_id = session user).
+    denyReservation: function (reservation, region) {
+      if (HRS.session.canAccessReservation(reservation)) return false;
+      HRS.ui.emptyState(region, {
+        title: 'This booking belongs to another guest',
+        message: 'Guests can only view and manage their own bookings.',
+        href: HRS.url.to('guest/my_bookings.php'), action: 'Go to my bookings'
+      });
+      return true;
     }
   };
+
+  /* ------------------------------------------------------------------
+     Role-based navigation and page guard (DEMO).
+     Elements with data-nav="public guest staff admin" are shown only to
+     those audiences ("public" = signed out). Pages declare allowed roles
+     with $pageRoles; other visitors are redirected.
+     BACKEND INTEGRATION: PHP must enforce the same rules server-side
+     (session role check before rendering, 302 to login / dashboard).
+     A frontend guard is not security — anyone can edit localStorage.
+     ------------------------------------------------------------------ */
+
+  function applyRoleNav(user) {
+    var audience = user ? user.role : 'public';
+    HRS.dom.qsa('[data-nav]').forEach(function (el) {
+      el.hidden = el.dataset.nav.split(/\s+/).indexOf(audience) === -1;
+    });
+    HRS.dom.qsa('[data-user-name]').forEach(function (el) { el.textContent = user ? user.full_name : ''; });
+    HRS.dom.qsa('[data-user-initials]').forEach(function (el) { el.textContent = user ? HRS.format.initials(user.full_name) : ''; });
+    HRS.dom.qsa('[data-user-role]').forEach(function (el) { el.textContent = user ? HRS.format.label(user.role) + ' (demo)' : ''; });
+  }
+
+  // Returns the redirect target for a visitor who may not view this page, or null
+  function guardTarget(user) {
+    var roles = HRS.config.pageRoles;
+    if (!roles.length) return null;
+    if (!user) return { path: 'login.php', params: { redirect: HRS.url.current() + window.location.search }, message: 'Please sign in with a demo account to continue.', type: 'info' };
+    if (roles.indexOf(user.role) === -1) {
+      return { path: HRS.session.homeFor(user.role), message: 'That page is not available to ' + user.role + ' accounts, so you were taken to your dashboard.', type: 'warning' };
+    }
+    return null;
+  }
+
+  function redirectTo(target) {
+    document.body.classList.add('is-redirecting');
+    HRS.ui.flash(target.message, { type: target.type });
+    window.location.replace(HRS.url.to(target.path, target.params));
+  }
+
+  HRS.ui.applyRoleNav = applyRoleNav;
 
   /* ------------------------------------------------------------------
      Page chrome
@@ -547,33 +683,6 @@ window.HRS = window.HRS || {};
       var target = new URL(link.href, window.location.href).pathname.split('/').slice(-2).join('/');
       if (target === current) link.setAttribute('aria-current', 'page');
     });
-
-    var user = HRS.session.current();
-    HRS.dom.qsa('[data-auth]').forEach(function (el) {
-      el.hidden = (el.dataset.auth === 'signed-in') !== !!user;
-    });
-    if (user) {
-      HRS.dom.qsa('[data-user-name]').forEach(function (el) { el.textContent = user.full_name + ' (' + user.role + ')'; });
-      HRS.dom.qsa('[data-user-initials]').forEach(function (el) { el.textContent = HRS.format.initials(user.full_name); });
-    }
-  }
-
-  // Non-blocking notice on admin/staff pages viewed without that demo role.
-  // Real access control must be enforced by PHP.
-  function initRoleNotice() {
-    var role = HRS.config.pageRole;
-    if (!role) return;
-    var allowed = role === 'staff' ? ['staff', 'admin'] : [role];
-    if (HRS.session.hasRole(allowed)) return;
-    var container = document.querySelector('#main .container');
-    if (!container) return;
-    var notice = document.createElement('div');
-    notice.className = 'alert alert-info';
-    notice.setAttribute('role', 'note');
-    notice.innerHTML = toHtml(html`<span>You are viewing the <strong>${role}</strong> screens without a demo ${role} sign-in.
-      <a href="${HRS.url.to('login.php', { redirect: window.location.pathname.split('/').slice(-2).join('/') })}">Sign in with the demo ${role} account</a>.
-      In the real system the server will block this page.</span>`);
-    container.insertBefore(notice, container.firstChild);
   }
 
   function initGlobalHandlers() {
@@ -623,19 +732,27 @@ window.HRS = window.HRS || {};
     }
   }
 
+  // Synchronous first pass with the stored session (before paint), so the
+  // right navigation shows immediately and restricted content is hidden.
+  var storedUser = HRS.session.current();
+  applyRoleNav(storedUser);
+  if (guardTarget(storedUser)) document.body.classList.add('is-redirecting');
+
   document.addEventListener('DOMContentLoaded', function () {
     initNavbar();
     initGlobalHandlers();
-    initRoleNotice();
-    HRS.ui.showFlash();
-    var page = HRS.pages[HRS.config.pageId];
-    if (typeof page === 'function') {
-      Promise.resolve()
-        .then(page)
-        .catch(function (error) {
-          console.error(error);
-          HRS.ui.toast(error.message || 'Something went wrong loading this page.', { type: 'error' });
-        });
-    }
+    HRS.session.verify().then(function (user) {
+      applyRoleNav(user);
+      var target = guardTarget(user);
+      if (target) { redirectTo(target); return; }
+      document.body.classList.remove('is-redirecting');
+      HRS.ui.showFlash();
+      var page = HRS.pages[HRS.config.pageId];
+      if (typeof page !== 'function') return;
+      return Promise.resolve().then(page);
+    }).catch(function (error) {
+      console.error(error);
+      HRS.ui.toast(error.message || 'Something went wrong loading this page.', { type: 'error' });
+    });
   });
 })(window.HRS);

@@ -99,10 +99,22 @@
                                     <legend>Amenities</legend>
                                     <div class="check-list" data-region="amenity-options"></div>
                                 </fieldset>
+                                <!-- BACKEND INTEGRATION: room_image is posted as multipart/form-data;
+                                     PHP validates type/size again, stores the file and saves its
+                                     path in rooms.image_url. The demo keeps a resized copy in
+                                     the browser instead (assets/js/admin.js). -->
                                 <div class="form-group">
                                     <label class="form-label" for="r-image">Room photo</label>
-                                    <input class="form-control" type="file" id="r-image" name="room_image" accept="image/png, image/jpeg, image/webp">
-                                    <p class="form-help">JPG, PNG or WebP up to 5 MB. Demo: the photo is previewed only and not uploaded.</p>
+                                    <input class="form-control" type="file" id="r-image" name="room_image" accept="image/jpeg, image/png, image/webp" aria-describedby="r-image-help">
+                                    <p class="form-help" id="r-image-help">JPG, PNG or WebP, up to 5 MB. Choose another file to replace the photo. Demo: the photo is resized and kept in this browser only, not uploaded.</p>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="r-image-alt">Photo description (alt text)</label>
+                                    <input class="form-control" type="text" id="r-image-alt" name="image_alt" maxlength="140" placeholder="e.g. King bed facing the balcony and sea view">
+                                    <p class="form-help">Describes the photo for screen-reader users. Leave empty to use the room name.</p>
+                                </div>
+                                <div>
+                                    <button class="btn btn-ghost btn-sm" type="button" data-action="remove-photo" hidden>Remove photo</button>
                                 </div>
                             </div>
                         </section>
@@ -115,7 +127,7 @@
 
                     <aside class="sticky-aside">
                         <h2 class="text-lg">Live preview</h2>
-                        <div class="image-preview mb-4" data-region="image-preview">No photo selected</div>
+                        <div class="image-preview mb-4" data-region="image-preview" aria-live="polite">No photo selected</div>
                         <div data-region="room-preview"></div>
                     </aside>
                 </div>

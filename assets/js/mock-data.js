@@ -5,10 +5,12 @@
  * comes from a database. Field names are snake_case and mirror the planned
  * MySQL columns so the render code can consume real JSON from PHP later:
  *
- *   users            user_id, full_name, email, phone, role, created_at
+ *   users            user_id, full_name, email, phone, role, created_at,
+ *                    password_hash (DEMO: sha256 of "hrs-demo:<email>:<password>")
  *   rooms            room_id, room_number, room_type, title, description, floor,
  *                    capacity, bed_type, size_sqm, view, price_per_night,
- *                    status, amenities[]
+ *                    status, amenities[], image_url, image_alt,
+ *                    gallery[] ({ url, alt }) — paths relative to the project root
  *   room_types       room_type, label, base_price, description
  *   pricing_rules    rule_id, name, room_type ('all' or a type), start_date,
  *                    end_date, adjustment_percent, is_active
@@ -40,7 +42,7 @@
 
   HRS.mockData = {
     settings: {
-      hotel_name: 'Aurelia Grand Hotel',
+      hotel_name: 'The Developers Hotel',
       currency: 'USD',
       tax_rate: 0.14,
       service_rate: 0.12,
@@ -49,10 +51,16 @@
       check_out_time: '12:00'
     },
 
+    // DEMO ONLY accounts — the passwords are published on login.php:
+    //   admin@example.com / Admin@2026, staff@example.com / Staff@2026,
+    //   guest@example.com / Guest@2026. Other sample guests cannot sign in.
     users: [
-      { user_id: 1, full_name: 'Mona Hassan', email: 'admin@example.com', phone: '+20 100 000 0001', role: 'admin', created_at: day(-400) },
-      { user_id: 2, full_name: 'Karim Adel', email: 'staff@example.com', phone: '+20 100 000 0002', role: 'staff', created_at: day(-300) },
-      { user_id: 3, full_name: 'Sara Mahmoud', email: 'guest@example.com', phone: '+20 100 000 0003', role: 'guest', created_at: day(-120) },
+      { user_id: 1, full_name: 'Mona Hassan', email: 'admin@example.com', phone: '+20 100 000 0001', role: 'admin', created_at: day(-400),
+        password_hash: '209d30ec4b53618d78bc1f0c4fab9899e43a7feb3e1eb9ea0184481918ec14a9' },
+      { user_id: 2, full_name: 'Karim Adel', email: 'staff@example.com', phone: '+20 100 000 0002', role: 'staff', created_at: day(-300),
+        password_hash: 'bda417b9c9d63802ebf920b315519b07d33d6b16f206d359ea74ac1293221097' },
+      { user_id: 3, full_name: 'Sara Mahmoud', email: 'guest@example.com', phone: '+20 100 000 0003', role: 'guest', created_at: day(-120),
+        password_hash: 'b582b2e3d29d485be271697b1eede73c230c79d2915e19c9c112af5880a817c8' },
       { user_id: 4, full_name: 'James Carter', email: 'james.carter@example.com', phone: '+44 20 0000 0004', role: 'guest', created_at: day(-90) },
       { user_id: 5, full_name: 'Laila Nabil', email: 'laila.nabil@example.com', phone: '+20 100 000 0005', role: 'guest', created_at: day(-80) },
       { user_id: 6, full_name: 'Omar Farouk', email: 'omar.farouk@example.com', phone: '+20 100 000 0006', role: 'guest', created_at: day(-75) },
@@ -89,9 +97,9 @@
       { room_id: 7, room_number: '302', room_type: 'deluxe', title: 'Deluxe Corner Room', floor: 3, capacity: 3, bed_type: 'King bed + sofa bed', size_sqm: 42, view: 'Sea', price_per_night: 225, status: 'occupied',
         amenities: ['Wi-Fi', 'Air conditioning', 'Smart TV', 'Mini bar', 'Sea view', 'Bathtub', 'Coffee machine', 'Room service'],
         description: 'A bright corner room with wraparound windows and a sofa bed for a third guest.' },
-      { room_id: 8, room_number: '401', room_type: 'family', title: 'Family Room', floor: 4, capacity: 4, bed_type: 'Two queen beds', size_sqm: 48, view: 'City', price_per_night: 260, status: 'available',
+      { room_id: 8, room_number: '401', room_type: 'family', title: 'Family Room', floor: 4, capacity: 4, bed_type: 'King bed + sofa bed', size_sqm: 48, view: 'City', price_per_night: 260, status: 'available',
         amenities: ['Wi-Fi', 'Air conditioning', 'Smart TV', 'Mini bar', 'Kitchenette', 'Safe'],
-        description: 'Two queen beds, a kitchenette and plenty of storage for longer family stays.' },
+        description: 'A bright, spacious room with a king bed, a double sofa bed, a kitchenette and plenty of storage for longer family stays.' },
       { room_id: 9, room_number: '402', room_type: 'family', title: 'Family Sea View', floor: 4, capacity: 5, bed_type: 'King + two singles', size_sqm: 55, view: 'Sea', price_per_night: 280, status: 'available',
         amenities: ['Wi-Fi', 'Air conditioning', 'Smart TV', 'Kitchenette', 'Sea view', 'Balcony', 'Bathtub'],
         description: 'A connecting-room layout with a king bedroom and a separate twin room for the children.' },
@@ -100,11 +108,41 @@
         description: 'An open-plan suite with a lounge area, executive lounge access and sweeping sea views.' },
       { room_id: 11, room_number: '502', room_type: 'suite', title: 'Executive Suite', floor: 5, capacity: 4, bed_type: 'King bed + sofa bed', size_sqm: 72, view: 'Sea', price_per_night: 450, status: 'available',
         amenities: ['Wi-Fi', 'Air conditioning', 'Smart TV', 'Mini bar', 'Sea view', 'Balcony', 'Jacuzzi', 'Lounge access', 'Room service'],
-        description: 'A separate living room, dining area and a balcony jacuzzi above the Corniche.' },
+        description: 'A separate living room, dining area and a balcony jacuzzi above the bay.' },
       { room_id: 12, room_number: '601', room_type: 'suite', title: 'Presidential Suite', floor: 6, capacity: 4, bed_type: 'Two king beds', size_sqm: 120, view: 'Panoramic', price_per_night: 890, status: 'available',
         amenities: ['Wi-Fi', 'Air conditioning', 'Smart TV', 'Mini bar', 'Sea view', 'Balcony', 'Jacuzzi', 'Lounge access', 'Room service', 'Kitchenette'],
         description: 'The top floor in its entirety: two bedrooms, a private dining room and a panoramic terrace.' }
     ],
+
+    // Room photography (local files, see assets/images/rooms/CREDITS.md).
+    // Merged into `rooms` below; a missing/broken image falls back to the
+    // styled placeholder in HRS.views.roomMedia.
+    room_photos: {
+      1: ['classic-single-101.jpg', 'Classic single room with a queen bed, built-in sofa and work desk',
+        [['gallery/single-room-work-desk.jpg', 'Work desk and window seat in a classic single room'], ['gallery/minimal-dark-bedroom.jpg', 'Quiet bedroom corner with reading lamp']]],
+      2: ['classic-single-102.jpg', 'Minimalist single room with a dark upholstered bed and framed line art',
+        [['gallery/minimalist-white-bedroom.jpg', 'Bright minimalist bedroom with tufted bed'], ['gallery/bright-modern-bedroom.jpg', 'Modern bedroom with padded headboard wall']]],
+      3: ['superior-king-city-201.jpg', 'Superior king room with grey headboard and floor-to-ceiling city windows',
+        [['gallery/king-room-grey-headboard.jpg', 'King bed with grey headboard and mirrored wardrobe'], ['gallery/king-room-dark-accent.jpg', 'King room with dark accent wall and bedside lamps']]],
+      4: ['superior-twin-202.jpg', 'Superior twin room with two beds, teal throws and a seating area',
+        [['gallery/bathroom-freestanding-tub.jpg', 'Bright bathroom with freestanding bathtub']]],
+      5: ['superior-king-pool-203.jpg', 'Superior king room with warm bedside lighting and wood-panelled wall',
+        [['gallery/king-room-wood-panels.jpg', 'King bed framed by dark wood panels'], ['gallery/king-room-warm-lighting.jpg', 'King room with garden view and warm lighting']]],
+      6: ['deluxe-sea-view-301.jpg', 'Deluxe room with a king bed facing open balcony doors and morning light',
+        [['gallery/bed-deck-mountain-view.jpg', 'Bed on a private deck overlooking water and mountains'], ['gallery/bathroom-freestanding-tub.jpg', 'Bathroom with freestanding bathtub']]],
+      7: ['deluxe-corner-302.jpg', 'Deluxe corner room with wraparound windows over the skyline',
+        [['gallery/dark-bedroom-garden-view.jpg', 'Bedroom with dark feature wall and large garden window'], ['gallery/bedroom-teal-bench.jpg', 'King bed with teal bench and reading chair']]],
+      8: ['family-room-401.jpg', 'Spacious family room with a king bed, sitting chair and plush rug',
+        [['gallery/family-bedroom-ottomans.jpg', 'Family bedroom with twin ottomans at the foot of the bed'], ['gallery/modern-room-lounge-corner.jpg', 'Lounge corner with TV and dressing table']]],
+      9: ['family-sea-view-402.jpg', 'Family room with panoramic windows onto a turquoise sea and private deck',
+        [['gallery/infinity-pool-sea-terrace.jpg', 'Infinity pool terrace overlooking the sea'], ['gallery/king-room-balcony-doors.jpg', 'Bedroom with balcony doors and a seating area']]],
+      10: ['junior-suite-501.jpg', 'Junior suite with king bed and a separate lounge sofa by tall windows',
+        [['gallery/suite-bedroom-chandelier.jpg', 'Suite bedroom with channel-tufted bed and city view'], ['gallery/suite-lounge-seating.jpg', 'Suite lounge with armchairs and coffee table']]],
+      11: ['executive-suite-502.jpg', 'Executive suite with tufted sofa, king bed and elegant drapery',
+        [['gallery/suite-bedroom-elegant.jpg', 'Elegant suite bedroom with pendant lights'], ['gallery/suite-living-room-view.jpg', 'Suite living room with a view of the bay and mountains']]],
+      12: ['presidential-suite-601.jpg', 'Presidential suite with panoramic glass walls and a sunken lounge',
+        [['gallery/luxury-bedroom-tufted.jpg', 'Luxury bedroom with tufted headboard and bench'], ['gallery/presidential-living-room.jpg', 'Presidential living room with coffered ceiling and fireplace']]]
+    },
 
     pricing_rules: [
       { rule_id: 1, name: 'Autumn Festival', room_type: 'suite', start_date: day(-2), end_date: day(10), adjustment_percent: 10, is_active: true },
@@ -157,4 +195,13 @@
       { complaint_id: 4, booking_reference: 'HRS-10255', guest_name: 'Omar Farouk', room_number: '502', category: 'billing', subject: 'Minibar charge disputed', description: 'Charged for two items that were not consumed.', priority: 'medium', status: 'resolved', resolution_notes: 'Charge reversed after minibar audit.', created_at: at(-66, '11:30') }
     ]
   };
+
+  var PHOTO_DIR = 'assets/images/rooms/';
+  HRS.mockData.rooms.forEach(function (room) {
+    var photo = HRS.mockData.room_photos[room.room_id];
+    room.image_url = photo ? PHOTO_DIR + photo[0] : '';
+    room.image_alt = photo ? photo[1] : '';
+    room.gallery = photo ? photo[2].map(function (g) { return { url: PHOTO_DIR + g[0], alt: g[1] }; }) : [];
+  });
+  delete HRS.mockData.room_photos;
 })(window.HRS);

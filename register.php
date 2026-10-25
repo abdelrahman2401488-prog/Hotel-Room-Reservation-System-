@@ -8,7 +8,8 @@ require __DIR__ . '/includes/header.php';
     <div class="container">
         <div class="auth-layout">
             <div class="auth-aside">
-                <span class="eyebrow">Join Aurelia</span>
+                <img class="auth-logo" src="assets/images/brand/logo-light.svg" alt="The Developers Hotel" width="272" height="64">
+                <span class="eyebrow">Join The Developers Hotel</span>
                 <h2>Create your guest account</h2>
                 <p>Keep every booking together, pay securely online and receive member-only offers.</p>
                 <ul class="check-list">
@@ -23,7 +24,7 @@ require __DIR__ . '/includes/header.php';
                 <p class="text-muted">Already registered? <a href="login.php">Sign in</a></p>
 
                 <div class="alert alert-warning" role="note">
-                    <span><strong>Demo registration.</strong> The account is kept only in this browser and your password is not stored.</span>
+                    <span><strong>DEMO ONLY.</strong> The guest account is kept only in this browser. Your password is stored as a demo hash in localStorage, which is not secure: do not reuse a real password.</span>
                 </div>
 
                 <!-- BACKEND INTEGRATION: POST to this page; validate again in PHP,

@@ -167,6 +167,7 @@
     return Promise.all([HRS.data.getReservation(ref), HRS.data.getRooms({ bookable: true, sort: 'number' })]).then(function (results) {
       var r = results[0];
       var rooms = results[1];
+      if (HRS.session.denyReservation(r, '[data-region="modify-page"]')) return;
       HRS.ui.fillFields(document, { booking_reference: r.booking_reference });
       var statusUrl = HRS.url.to('reservations/booking_status.php', { ref: r.booking_reference });
       qs('[data-region="status-crumb"]').href = statusUrl;
@@ -260,6 +261,7 @@
 
     return HRS.data.getReservation(ref).then(function (r) {
       var statusUrl = HRS.url.to('reservations/booking_status.php', { ref: r.booking_reference });
+      if (HRS.session.denyReservation(r, '[data-region="cancel-page"]')) return;
       HRS.ui.fillFields(document, { booking_reference: r.booking_reference });
       if (!isChangeable(r)) {
         HRS.ui.emptyState('[data-region="cancel-page"]', {
@@ -330,13 +332,19 @@
     })}</ol>`;
   }
 
+  // Actions depend on the demo role: guests pay / change their own booking,
+  // staff and admin can modify or cancel, signed-out visitors are asked to sign in.
   function renderStatus(r) {
     var ref = { ref: r.booking_reference };
+    var user = HRS.session.current();
+    var canManage = HRS.session.canAccessReservation(r);
+    var isGuest = !!user && user.role === 'guest';
     var actions = [];
-    if (isChangeable(r) && r.payment_status !== 'paid') actions.push(html`<a class="btn btn-accent" href="${HRS.url.to('reservations/payment.php', ref)}">Pay now</a>`);
-    if (isChangeable(r)) actions.push(html`<a class="btn btn-outline" href="${HRS.url.to('reservations/modify_booking.php', ref)}">Modify</a>`);
-    if (isChangeable(r)) actions.push(html`<a class="btn btn-ghost" href="${HRS.url.to('reservations/cancel_booking.php', ref)}">Cancel booking</a>`);
-    if (r.payment_status === 'paid') actions.push(html`<a class="btn btn-ghost" href="${HRS.url.to('reservations/payment_confirmation.php', ref)}">View receipt</a>`);
+    if (canManage && isGuest && isChangeable(r) && r.payment_status !== 'paid') actions.push(html`<a class="btn btn-accent" href="${HRS.url.to('reservations/payment.php', ref)}">Pay now</a>`);
+    if (canManage && isChangeable(r)) actions.push(html`<a class="btn btn-outline" href="${HRS.url.to('reservations/modify_booking.php', ref)}">Modify</a>`);
+    if (canManage && isChangeable(r)) actions.push(html`<a class="btn btn-ghost" href="${HRS.url.to('reservations/cancel_booking.php', ref)}">Cancel booking</a>`);
+    if (canManage && isGuest && r.payment_status === 'paid') actions.push(html`<a class="btn btn-ghost" href="${HRS.url.to('reservations/payment_confirmation.php', ref)}">View receipt</a>`);
+    if (!user && isChangeable(r)) actions.push(html`<a class="btn btn-primary" href="${HRS.url.to('login.php', { redirect: 'guest/my_bookings.php' })}">Sign in to pay or change this booking</a>`);
     HRS.dom.render('[data-region="status-result"]', html`
       <article class="card">
         <div class="card-header flex flex-wrap items-center justify-between gap-3">
@@ -376,11 +384,17 @@
       }
     });
 
-    // DEMO convenience: links from other pages pass ?ref= directly. The real
-    // page must only show a booking to its owner or to staff.
+    // Links from My bookings / Reservations pass ?ref=. Only the booking's
+    // owner or staff/admin see it directly; anyone else must use the lookup.
+    // BACKEND INTEGRATION: enforce the same ownership check in PHP.
     var ref = HRS.url.param('ref');
     if (ref) {
+      form.elements.booking_reference.value = ref;
       return HRS.data.getReservation(ref).then(function (r) {
+        if (!HRS.session.canAccessReservation(r)) {
+          HRS.dom.render('[data-region="status-result"]', html`<div class="alert alert-info"><span>Enter the email address used for booking ${r.booking_reference} to view its status.</span></div>`);
+          return;
+        }
         form.elements.booking_reference.value = r.booking_reference;
         form.elements.guest_email.value = r.guest_email;
         renderStatus(r);

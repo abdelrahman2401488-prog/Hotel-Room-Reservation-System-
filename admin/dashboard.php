@@ -2,7 +2,7 @@
 $pageTitle   = 'Admin dashboard';
 $pageId      = 'admin-dashboard';
 $pageScripts = ['admin.js'];
-$pageRole    = 'admin';
+$pageRoles   = 'admin';
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">

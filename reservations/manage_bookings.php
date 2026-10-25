@@ -2,12 +2,14 @@
 $pageTitle   = 'Manage reservations';
 $pageId      = 'manage-bookings';
 $pageScripts = ['reservations.js'];
-$pageRole    = 'staff';
+$pageRoles   = 'staff,admin';
+$sharedSidebar = true;   // admin and staff each see their own sidebar
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">
     <div class="container">
         <div class="layout-sidebar">
+<?php require __DIR__ . '/../includes/admin_sidebar.php'; ?>
 <?php require __DIR__ . '/../includes/staff_sidebar.php'; ?>
             <div>
                 <div class="page-header">
@@ -17,7 +19,6 @@ require __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="btn-group">
                         <button class="btn btn-outline" type="button" data-action="export">Export CSV</button>
-                        <a class="btn btn-accent" href="../guest/search_rooms.php">New booking</a>
                     </div>
                 </div>
 

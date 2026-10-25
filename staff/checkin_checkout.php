@@ -2,7 +2,7 @@
 $pageTitle   = 'Check-in / check-out';
 $pageId      = 'checkin-checkout';
 $pageScripts = ['staff.js'];
-$pageRole    = 'staff';
+$pageRoles   = 'staff';
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">

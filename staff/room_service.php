@@ -2,7 +2,7 @@
 $pageTitle   = 'Room service';
 $pageId      = 'room-service';
 $pageScripts = ['staff.js'];
-$pageRole    = 'staff';
+$pageRoles   = 'staff';
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">

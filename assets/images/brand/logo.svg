@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 64" width="272" height="64" role="img" aria-labelledby="title">
+  <title id="title">The Developers Hotel</title>
+  <!-- Logo for LIGHT backgrounds: navy arch + wordmark, gold accents -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 54V28a18 18 0 0 1 36 0v26" stroke="#1f3a5f" stroke-width="3.5"/>
+    <path d="M20 54V30a12 12 0 0 1 24 0v24" stroke="#c8a24a" stroke-width="1.5"/>
+    <path d="M9 54h46" stroke="#1f3a5f" stroke-width="3.5"/>
+    <path d="M27.5 36.5 23 41l4.5 4.5M36.5 36.5 41 41l-4.5 4.5M33.6 34.5l-3.2 13" stroke="#c8a24a" stroke-width="2.6"/>
+  </g>
+  <path d="M32 5.5 36 10l-4 4.5-4-4.5z" fill="#c8a24a"/>
+  <text x="70" y="33" font-family="Georgia, 'Times New Roman', serif" font-size="23" font-weight="700" fill="#1f3a5f">The Developers</text>
+  <path d="M71 45.5h22" stroke="#c8a24a" stroke-width="1.2"/>
+  <text x="99" y="50" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" letter-spacing="6" fill="#b08c37">HOTEL</text>
+  <path d="M166 45.5h22" stroke="#c8a24a" stroke-width="1.2"/>
+</svg>

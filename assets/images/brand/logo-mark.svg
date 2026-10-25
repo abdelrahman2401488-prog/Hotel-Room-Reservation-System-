@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="title">
+  <title id="title">The Developers Hotel</title>
+  <!-- App icon / favicon: navy tile with gold arch and code mark, bold strokes for small sizes -->
+  <rect width="64" height="64" rx="14" fill="#1f3a5f"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 53V30a17 17 0 0 1 34 0v23" stroke="#c8a24a" stroke-width="4.5"/>
+    <path d="M10 53h44" stroke="#c8a24a" stroke-width="4.5"/>
+    <path d="M27 36l-5 5 5 5M37 36l5 5-5 5M33.8 34l-3.6 14" stroke="#f7f3ec" stroke-width="3.4"/>
+  </g>
+  <path d="M32 6 36.5 11 32 16l-4.5-5z" fill="#c8a24a"/>
+</svg>

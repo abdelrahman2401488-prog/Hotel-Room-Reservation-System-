@@ -1,8 +1,9 @@
 /**
  * auth.js — DEMO sign-in, registration and sign-out screens.
  *
- * This is interface behaviour only. No password is verified or stored, and
- * the "session" is a localStorage entry (HRS.session in main.js).
+ * Credentials are checked in the browser against demo accounts
+ * (HRS.data.authenticate). This is NOT secure authentication: the "session"
+ * is a localStorage entry (HRS.session in main.js) that anyone can edit.
  * BACKEND INTEGRATION: let the forms POST to login.php / register.php and
  * handle credentials with password_hash()/password_verify() and PHP sessions.
  */
@@ -10,24 +11,31 @@
   'use strict';
 
   var qs = HRS.dom.qs;
+  var html = HRS.dom.html;
+  var render = function (markup) { return markup.toString(); };
 
+  // Admin -> Admin dashboard, Staff -> Staff dashboard, Guest -> My bookings,
+  // unless a safe ?redirect= target the role may open was requested.
   function redirectAfterLogin(user) {
     var redirect = HRS.url.param('redirect');
-    // Only allow relative in-project paths (no open redirects)
-    if (redirect && /^[a-z_]+\/[a-z_]+\.php$|^[a-z_]+\.php$/.test(redirect)) return HRS.url.go(redirect);
-    HRS.url.go(HRS.session.homeFor(user.role));
+    HRS.url.go(HRS.url.isSafeRedirect(redirect) ? redirect : HRS.session.homeFor(user.role));
   }
 
   HRS.pages.login = function () {
     var form = qs('[data-form="login"]');
     var current = HRS.session.current();
     if (current) {
-      HRS.ui.toast('You are already signed in as ' + current.full_name + ' (demo).', { type: 'info' });
+      var notice = document.createElement('div');
+      notice.className = 'alert alert-info';
+      notice.innerHTML = render(html`<span>You are signed in as <strong>${current.full_name}</strong> (${current.role}, demo).
+        <a href="${HRS.url.to(HRS.session.homeFor(current.role))}">Go to your ${current.role === 'guest' ? 'bookings' : 'dashboard'}</a>
+        or <a href="${HRS.url.to('logout.php')}">sign out</a> to switch accounts.</span>`);
+      form.parentElement.insertBefore(notice, form);
     }
 
     HRS.dom.on(qs('[data-region="demo-accounts"]'), 'click', '[data-email]', function (event, button) {
       form.elements.email.value = button.dataset.email;
-      form.elements.password.value = 'demo-password';
+      form.elements.password.value = button.dataset.password;
       HRS.validation.validateField(form.elements.email);
       HRS.validation.validateField(form.elements.password);
       form.querySelector('[type="submit"]').focus();
@@ -36,10 +44,13 @@
     HRS.validation.attach(form, {
       onSubmit: function (values, form, submit) {
         HRS.ui.setLoading(submit, true, 'Signing in…');
-        return HRS.data.findUserByEmail(values.email).then(function (user) {
+        return HRS.data.authenticate(values.email, values.password).then(function (user) {
           HRS.session.signIn(user);
           HRS.ui.flash('Signed in as ' + user.full_name + ' (' + user.role + ' demo account).', { type: 'success', title: 'Welcome back' });
           redirectAfterLogin(user);
+        }, function (error) {
+          form.elements.password.value = '';
+          throw error;
         });
       }
     });
@@ -64,8 +75,8 @@
         HRS.ui.setLoading(submit, true, 'Creating account…');
         return HRS.data.createUser(values).then(function (user) {
           HRS.session.signIn(user);
-          HRS.ui.flash('Your demo guest account is ready.', { type: 'success', title: 'Welcome, ' + user.full_name.split(' ')[0] });
-          HRS.url.go('guest/search_rooms.php');
+          HRS.ui.flash('Your demo guest account is ready. You can sign in again with the same email and password.', { type: 'success', title: 'Welcome, ' + user.full_name.split(' ')[0] });
+          HRS.url.go(HRS.session.homeFor('guest'));
         });
       }
     });
@@ -73,6 +84,6 @@
 
   HRS.pages.logout = function () {
     HRS.session.signOut();
-    HRS.dom.qsa('[data-auth]').forEach(function (el) { el.hidden = el.dataset.auth === 'signed-in'; });
+    HRS.ui.applyRoleNav(null);
   };
 })(window.HRS);

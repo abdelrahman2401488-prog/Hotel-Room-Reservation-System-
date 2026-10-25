@@ -2,7 +2,7 @@
 $pageTitle   = 'Staff dashboard';
 $pageId      = 'staff-dashboard';
 $pageScripts = ['staff.js'];
-$pageRole    = 'staff';
+$pageRoles   = 'staff';
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">

@@ -2,6 +2,7 @@
 $pageTitle   = 'Leave a review';
 $pageId      = 'leave-review';
 $pageScripts = ['reviews.js'];
+$pageRoles   = 'guest';
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">

@@ -2,12 +2,14 @@
 $pageTitle   = 'Revenue reports';
 $pageId      = 'revenue-reports';
 $pageScripts = ['reports.js'];
-$pageRole    = 'staff';
+$pageRoles   = 'staff,admin';
+$sharedSidebar = true;   // admin and staff each see their own sidebar
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">
     <div class="container">
         <div class="layout-sidebar">
+<?php require __DIR__ . '/../includes/admin_sidebar.php'; ?>
 <?php require __DIR__ . '/../includes/staff_sidebar.php'; ?>
             <div>
                 <div class="page-header">

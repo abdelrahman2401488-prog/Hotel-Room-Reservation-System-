@@ -89,7 +89,10 @@
         }
         HRS.dom.render(tbody, rooms.map(function (room) {
           return html`<tr>
-              <td><div class="font-semibold">${room.room_number} · ${room.title}</div><div class="text-xs text-muted">Floor ${room.floor} · ${room.view} view</div></td>
+              <td><div class="flex items-center gap-3">
+                ${HRS.views.roomMedia(room, 'room-media-table', { label: false })}
+                <div><div class="font-semibold">${room.room_number} · ${room.title}</div><div class="text-xs text-muted">Floor ${room.floor} · ${room.view} view</div></div>
+              </div></td>
               <td>${HRS.format.label(room.room_type)}</td>
               <td>${room.capacity}</td>
               <td class="num">${HRS.format.currency(room.price_per_night)}</td>
@@ -142,11 +145,45 @@
 
   /* ---------------- Add / edit room ---------------- */
 
+  var PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  var PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+  var PHOTO_MAX = { width: 1280, height: 800 };
+
+  // Decode the chosen file and re-encode it as a JPEG no larger than
+  // 1280x800 so the demo copy fits in localStorage (~100-250 KB).
+  // BACKEND INTEGRATION: upload the original file instead and let PHP
+  // resize/store it; keep only the returned path in rooms.image_url.
+  function resizePhoto(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, PHOTO_MAX.width / img.naturalWidth, PHOTO_MAX.height / img.naturalHeight);
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('This file could not be read as an image.'));
+      };
+      img.src = url;
+    });
+  }
+
   HRS.pages['room-form'] = function () {
     var form = qs('[data-form="room"]');
     var id = HRS.url.param('id');
     var isEdit = !!qs('[data-region="edit-page"]');
+    var previewBox = qs('[data-region="image-preview"]');
+    var removeButton = qs('[data-action="remove-photo"]');
     var roomTypes = [];
+    // Photo state: current image_url (path or data: URL) and a pending
+    // resize while the admin is choosing a file.
+    var photo = { url: '', pending: null };
 
     HRS.dom.render('[data-region="amenity-options"]', AMENITIES.map(function (a, i) {
       return html`<label class="form-check" for="amenity-${i}"><input type="checkbox" id="amenity-${i}" name="amenities" value="${a}" data-group> ${a}</label>`;
@@ -164,8 +201,21 @@
         bed_type: v.bed_type || 'Bed type',
         price_per_night: Number(v.price_per_night) || 0,
         amenities: v.amenities,
-        status: v.status
+        status: v.status,
+        image_url: photo.url,
+        image_alt: v.image_alt
       };
+    }
+
+    function renderPhoto(previewUrl) {
+      var src = previewUrl || HRS.media.url(photo.url);
+      removeButton.hidden = !photo.url && !previewUrl;
+      previewBox.classList.toggle('has-image', !!src);
+      if (!src) { previewBox.textContent = 'No photo selected — guests will see the styled placeholder.'; return; }
+      var img = document.createElement('img');
+      img.alt = form.elements.image_alt.value || 'Preview of the selected room photo';
+      img.src = src;
+      previewBox.replaceChildren(img);
     }
 
     function preview() {
@@ -183,25 +233,60 @@
     form.addEventListener('change', preview);
 
     form.elements.room_image.addEventListener('change', function () {
-      var file = form.elements.room_image.files[0];
-      var box = qs('[data-region="image-preview"]');
-      if (!file) { box.textContent = 'No photo selected'; return; }
-      if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
-        HRS.validation.setError(form.elements.room_image, 'Choose a JPG, PNG or WebP image under 5 MB.');
-        form.elements.room_image.value = '';
+      var input = form.elements.room_image;
+      var file = input.files[0];
+      if (!file) return;
+      var error = PHOTO_TYPES.indexOf(file.type) === -1 ? 'Choose a JPG, PNG or WebP image.'
+        : file.size > PHOTO_MAX_BYTES ? 'This image is ' + (file.size / 1048576).toFixed(1) + ' MB. Choose one under 5 MB.' : '';
+      if (error) {
+        HRS.validation.setError(input, error);
+        input.value = '';
         return;
       }
-      HRS.validation.setError(form.elements.room_image, '');
-      var img = document.createElement('img');
-      img.alt = 'Selected room photo preview';
-      img.src = URL.createObjectURL(file);
-      box.replaceChildren(img);
+      HRS.validation.setError(input, '');
+      var objectUrl = URL.createObjectURL(file);
+      renderPhoto(objectUrl); // instant preview while the resize runs
+      photo.pending = resizePhoto(file).then(function (dataUrl) {
+        photo.url = dataUrl;
+        photo.pending = null;
+        URL.revokeObjectURL(objectUrl);
+        renderPhoto();
+        preview();
+      }, function (err) {
+        photo.pending = null;
+        URL.revokeObjectURL(objectUrl);
+        HRS.validation.setError(input, err.message);
+        input.value = '';
+        renderPhoto();
+      });
+    });
+
+    form.elements.image_alt.addEventListener('input', function () {
+      var img = previewBox.querySelector('img');
+      if (img) img.alt = form.elements.image_alt.value || 'Preview of the selected room photo';
+    });
+
+    removeButton.addEventListener('click', function () {
+      photo.url = '';
+      form.elements.room_image.value = '';
+      renderPhoto();
+      preview();
+      HRS.ui.toast('Photo removed. Save the room to apply the change.', { type: 'info' });
     });
 
     HRS.validation.attach(form, {
       onSubmit: function (data, form, submit) {
         HRS.ui.setLoading(submit, true, 'Saving…');
-        return HRS.data.saveRoom(data).then(function (room) {
+        return Promise.resolve(photo.pending).then(function () {
+          data.image_url = photo.url;
+          return HRS.data.saveRoom(data);
+        }).then(function (room) {
+          if (room.storage_warning) {
+            // A session-only photo would be lost on navigation: stay and explain
+            HRS.ui.setLoading(submit, false);
+            HRS.ui.toast('Room ' + room.room_number + ' saved. ' + room.storage_warning, { type: 'warning', timeout: 9000 });
+            return;
+          }
           HRS.ui.flash('Room ' + room.room_number + (isEdit ? ' updated' : ' created') + ' (demo, saved in this browser).', { type: 'success' });
           HRS.url.go('admin/room_details.php', { id: room.room_id });
         });
@@ -215,6 +300,7 @@
         form.elements.status.value = 'available';
         form.elements.floor.value = 1;
         form.elements.capacity.value = 2;
+        renderPhoto();
         preview();
       });
     }
@@ -222,10 +308,12 @@
     return load.then(function () { return HRS.data.getRoom(id); }).then(function (room) {
       HRS.ui.fillFields(document, { room_number: room.room_number });
       qs('[data-region="details-link"]').href = HRS.url.to('admin/room_details.php', { id: room.room_id });
-      ['room_id', 'room_number', 'floor', 'room_type', 'title', 'description', 'capacity', 'bed_type', 'size_sqm', 'price_per_night', 'view', 'status'].forEach(function (name) {
-        form.elements[name].value = room[name];
+      ['room_id', 'room_number', 'floor', 'room_type', 'title', 'description', 'capacity', 'bed_type', 'size_sqm', 'price_per_night', 'view', 'status', 'image_alt'].forEach(function (name) {
+        form.elements[name].value = room[name] === undefined ? '' : room[name];
       });
       HRS.dom.qsa('[name="amenities"]', form).forEach(function (box) { box.checked = room.amenities.indexOf(box.value) !== -1; });
+      photo.url = room.image_url || '';
+      renderPhoto();
       preview();
     }).catch(function () { roomNotFound('[data-region="edit-page"]'); });
   };

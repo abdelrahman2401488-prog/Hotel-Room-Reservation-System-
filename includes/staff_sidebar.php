@@ -1,9 +1,14 @@
 <?php
 /**
  * Side navigation for staff pages. Active link is set by assets/js/main.js.
+ * Contains no admin (room / pricing management) links.
  */
 ?>
-        <aside class="sidebar" aria-label="Staff">
+        <aside class="sidebar" aria-label="Staff" data-nav="staff">
+            <div class="sidebar-brand">
+                <img src="<?= $baseUrl ?>assets/images/brand/logo-mark.svg" alt="" width="32" height="32">
+                <span>Staff console</span>
+            </div>
             <h2 class="sidebar-title">Front desk</h2>
             <ul class="sidebar-nav">
                 <li><a class="sidebar-link" href="<?= $baseUrl ?>staff/dashboard.php">Dashboard</a></li>

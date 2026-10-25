@@ -8,8 +8,9 @@ require __DIR__ . '/includes/header.php';
     <section class="hero">
         <div class="container">
             <div class="hero-content">
-                <span class="eyebrow">Alexandria &middot; Since 1924</span>
-                <h1>A grand stay on the Mediterranean</h1>
+                <img class="hero-emblem" src="assets/images/brand/logo-emblem.svg" alt="" width="64" height="64">
+                <span class="eyebrow">The Developers Hotel &middot; Alexandria</span>
+                <h1>A refined stay on the Mediterranean</h1>
                 <p class="hero-lead">Sea-view rooms, signature suites and attentive service. Find the room that suits your trip and book it in a few steps.</p>
             </div>
 
@@ -69,7 +70,7 @@ require __DIR__ . '/includes/header.php';
 
         <section class="section" aria-labelledby="features-title">
             <div class="section-header">
-                <span class="eyebrow">Why Aurelia</span>
+                <span class="eyebrow">Why The Developers Hotel</span>
                 <h2 id="features-title">Everything taken care of</h2>
             </div>
             <div class="grid grid-4">

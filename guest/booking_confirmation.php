@@ -2,6 +2,7 @@
 $pageTitle   = 'Booking confirmation';
 $pageId      = 'booking-confirmation';
 $pageScripts = ['booking.js'];
+$pageRoles   = 'guest';
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">
@@ -29,6 +30,7 @@ require __DIR__ . '/../includes/header.php';
                     <h2 class="text-lg mb-0">Stay summary</h2>
                     <span data-region="status-badges"></span>
                 </div>
+                <div data-region="room-photo"></div>
                 <div class="card-body" data-region="details"></div>
             </div>
 

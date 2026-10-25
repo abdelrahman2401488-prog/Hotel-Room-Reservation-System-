@@ -16,7 +16,8 @@
   'use strict';
 
   var PREFIX = 'hrs_demo_';
-  var VERSION = '1';
+  // Bump when the seed data shape changes so browsers reseed (v2: photos, demo passwords)
+  var VERSION = '2';
   var COLLECTIONS = ['users', 'rooms', 'room_types', 'pricing_rules', 'reservations', 'payments', 'reviews', 'service_requests', 'complaints'];
   var state = {};
   var LATENCY = 150; // ms, simulates a network round trip
@@ -27,8 +28,67 @@
 
   function clone(value) { return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }
 
+  // Returns false when the browser refuses the write (quota exceeded or
+  // storage disabled); the data then lives in memory for this page only.
   function persist(name) {
-    try { localStorage.setItem(PREFIX + name, JSON.stringify(state[name])); } catch (e) { /* private mode: keep in memory */ }
+    try { localStorage.setItem(PREFIX + name, JSON.stringify(state[name])); return true; } catch (e) { return false; }
+  }
+
+  // Photos that did not fit in localStorage: kept in memory for this page view.
+  var sessionImages = {};
+
+  /* ------------------------------------------------------------------
+     SHA-256 (pure JS so it also works on non-HTTPS hosts where
+     crypto.subtle is unavailable). DEMO credential check only — real
+     password hashing must happen server-side (password_hash in PHP).
+     ------------------------------------------------------------------ */
+
+  function sha256(message) {
+    var K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+      0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+      0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+      0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+    var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var bytes = Array.from(new TextEncoder().encode(message));
+    var bitLength = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (var s = 56; s >= 0; s -= 8) bytes.push(s >= 32 ? Math.floor(bitLength / Math.pow(2, s)) & 0xff : (bitLength >>> s) & 0xff);
+    var rotr = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+    for (var i = 0; i < bytes.length; i += 64) {
+      var w = [];
+      for (var t = 0; t < 64; t++) {
+        if (t < 16) w[t] = (bytes[i + t * 4] << 24) | (bytes[i + t * 4 + 1] << 16) | (bytes[i + t * 4 + 2] << 8) | bytes[i + t * 4 + 3];
+        else {
+          var s0 = rotr(w[t - 15], 7) ^ rotr(w[t - 15], 18) ^ (w[t - 15] >>> 3);
+          var s1 = rotr(w[t - 2], 17) ^ rotr(w[t - 2], 19) ^ (w[t - 2] >>> 10);
+          w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
+        }
+      }
+      var a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (t = 0; t < 64; t++) {
+        var t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[t] + w[t]) | 0;
+        var t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      H = [H[0] + a, H[1] + b, H[2] + c, H[3] + d, H[4] + e, H[5] + f, H[6] + g, H[7] + h].map(function (v) { return v | 0; });
+    }
+    return H.map(function (v) { return ('00000000' + (v >>> 0).toString(16)).slice(-8); }).join('');
+  }
+
+  function demoPasswordHash(email, password) {
+    return sha256('hrs-demo:' + String(email).trim().toLowerCase() + ':' + password);
+  }
+
+  // Never expose password hashes to page code
+  function publicUser(user) {
+    var copy = clone(user);
+    delete copy.password_hash;
+    return copy;
   }
 
   function seed() {
@@ -94,6 +154,13 @@
 
   function findRoom(id) {
     return state.rooms.filter(function (r) { return String(r.room_id) === String(id); })[0] || null;
+  }
+
+  // Copy of a room with any session-only photo applied
+  function withImage(room) {
+    var copy = clone(room);
+    if (sessionImages[room.room_id]) copy.image_url = sessionImages[room.room_id];
+    return copy;
   }
 
   function findReservation(refOrId) {
@@ -180,7 +247,7 @@
   function withRoom(reservation) {
     var room = findRoom(reservation.room_id);
     var copy = clone(reservation);
-    copy.room = room ? clone(room) : null;
+    copy.room = room ? withImage(room) : null;
     copy.nights = HRS.date.diffDays(reservation.check_in_date, reservation.check_out_date);
     return copy;
   }
@@ -225,20 +292,26 @@
         number: function (a, b) { return a.room_number.localeCompare(b.room_number); }
       };
       list.sort(sorters[filters.sort] || sorters.number);
-      return respond(list);
+      return respond(list.map(withImage));
     },
 
     getRoom: function (id) {
       var room = findRoom(id);
-      return room ? respond(room) : fail('Room not found.');
+      return room ? respond(withImage(room)) : fail('Room not found.');
     },
 
     // admin/add_room.php and admin/edit_room.php (POST)
+    // data.image_url: existing path, a data: URL from the admin photo picker,
+    // or '' to remove the photo.
+    // BACKEND INTEGRATION: send the photo as multipart/form-data (room_image)
+    // to the PHP handler, which validates it, stores it under assets/images/rooms
+    // (or object storage) and saves the resulting path in rooms.image_url.
     saveRoom: function (data) {
       var duplicate = state.rooms.some(function (r) {
         return r.room_number === data.room_number && String(r.room_id) !== String(data.room_id || '');
       });
       if (duplicate) return fail('Room number ' + data.room_number + ' already exists.', 'room_number');
+      var existing = data.room_id ? findRoom(data.room_id) : null;
       var room = {
         room_id: data.room_id ? Number(data.room_id) : nextId('rooms', 'room_id'),
         room_number: data.room_number,
@@ -252,12 +325,26 @@
         view: data.view,
         price_per_night: Number(data.price_per_night),
         status: data.status,
-        amenities: data.amenities || []
+        amenities: data.amenities || [],
+        image_url: data.image_url !== undefined ? data.image_url : (existing ? existing.image_url : ''),
+        image_alt: data.image_alt || (data.title + ' — ' + data.room_type + ' room ' + data.room_number),
+        gallery: existing ? existing.gallery || [] : []
       };
       var index = state.rooms.findIndex(function (r) { return r.room_id === room.room_id; });
       if (index === -1) state.rooms.push(room); else state.rooms[index] = room;
-      persist('rooms');
-      return respond(room);
+      delete sessionImages[room.room_id];
+
+      var warning = '';
+      if (!persist('rooms') && /^data:/.test(room.image_url)) {
+        // Quota exceeded: persist the room without its photo and keep the
+        // photo in memory (overlaid by withImage) until the page is left.
+        sessionImages[room.room_id] = room.image_url;
+        room.image_url = '';
+        warning = persist('rooms')
+          ? 'The photo is too large for this browser\'s demo storage, so it is shown only until you leave this page.'
+          : 'This browser\'s demo storage is full; changes are kept only until you leave this page.';
+      }
+      return respond(Object.assign(withImage(room), { storage_warning: warning }));
     },
 
     // admin/delete_room.php (POST)
@@ -627,29 +714,42 @@
       return respond(complaint);
     },
 
-    /* ---- Users — login.php / register.php (DEMO, no passwords stored) ---- */
+    /* ---- Users — login.php / register.php (DEMO credentials only) ---- */
 
-    findUserByEmail: function (email) {
-      var user = state.users.filter(function (u) { return u.email.toLowerCase() === String(email).toLowerCase(); })[0];
-      return user ? respond(user) : fail('No demo account uses that email. Try a demo account below or register.', 'email');
+    // BACKEND INTEGRATION: POST email + password to login.php; PHP verifies
+    // with password_verify(), starts the session and returns the user/role.
+    authenticate: function (email, password) {
+      var user = state.users.filter(function (u) { return u.email.toLowerCase() === String(email).trim().toLowerCase(); })[0];
+      // Same message for unknown email and wrong password (no account enumeration)
+      if (!user || !user.password_hash || user.password_hash !== demoPasswordHash(email, password)) {
+        return fail('Incorrect email or password. Check the demo credentials below.', 'password');
+      }
+      return respond(publicUser(user));
+    },
+
+    // Used to validate the stored demo session on every page load
+    getUser: function (userId) {
+      var user = state.users.filter(function (u) { return String(u.user_id) === String(userId); })[0];
+      return user ? respond(publicUser(user)) : fail('User not found.');
     },
 
     createUser: function (data) {
       if (state.users.some(function (u) { return u.email.toLowerCase() === data.email.toLowerCase(); })) {
         return fail('An account with this email already exists.', 'email');
       }
-      // The password is deliberately NOT stored: the prototype has no real auth.
       var user = {
         user_id: nextId('users', 'user_id'),
         full_name: data.full_name,
-        email: data.email,
+        email: data.email.trim().toLowerCase(),
         phone: data.phone,
         role: 'guest',
-        created_at: HRS.date.today()
+        created_at: HRS.date.today(),
+        // DEMO: salted SHA-256 in localStorage is NOT secure storage
+        password_hash: demoPasswordHash(data.email, data.password)
       };
       state.users.push(user);
       persist('users');
-      return respond(user);
+      return respond(publicUser(user));
     },
 
     resetDemoData: function () { seed(); }

@@ -9,7 +9,7 @@ Plain PHP project (no framework). Pages live in the root and in `admin/`, `guest
 $pageTitle   = 'Search Rooms';
 $pageId      = 'search-rooms';     // runs HRS.pages['search-rooms'] from the page script
 $pageScripts = ['booking.js'];     // optional, files in assets/js/
-$pageRole    = 'admin';            // optional, demo audience hint (admin | staff)
+$pageRoles   = 'staff,admin';      // optional, roles allowed on the page ('' = public)
 require __DIR__ . '/../includes/header.php';   // './includes/header.php' for root pages
 ?>
 <main id="main" class="main-content">
@@ -27,6 +27,20 @@ require __DIR__ . '/../includes/header.php';   // './includes/header.php' for ro
 - Page scripts only talk to `HRS.data.*` (Promise-based). Backend integration = re-implement those methods with `fetch()` to PHP; keep names and return shapes.
 - `HRS.session` (main.js) is a demo sign-in, not authentication. Search `BACKEND INTEGRATION` for every integration point.
 - Field names are snake_case and match the planned MySQL columns (see the header of mock-data.js).
+- Brand: **The Developers Hotel**. Logos in `assets/images/brand/` (`logo.svg` light bg, `logo-light.svg` dark bg, `logo-emblem.svg`, `logo-mark.svg`/`assets/favicon.svg`, PNG exports). Do not reintroduce text-only brand marks.
+
+## Roles (demo)
+
+- Demo accounts (DEMO ONLY, listed on login.php): admin@example.com / Admin@2026, staff@example.com / Staff@2026, guest@example.com / Guest@2026.
+- Landing pages: admin → `admin/dashboard.php`, staff → `staff/dashboard.php`, guest → `guest/my_bookings.php`.
+- Access: `admin/*` admin only; `staff/*` staff only; reservations list + `reports/*` staff and admin; booking flow, payment, my bookings, reviews submission guest only; modify/cancel guest (own bookings) + staff + admin. Everything else is public.
+- Navigation items carry `data-nav="public guest staff admin"` (any subset); main.js shows only the current role's items. Never add admin links to staff/guest navigation.
+- Pages shared by admin and staff set `$sharedSidebar = true` and include both `admin_sidebar.php` and `staff_sidebar.php`.
+
+## Room photos
+
+- Rooms have `image_url` (project-relative path), `image_alt` and `gallery[]` (`{ url, alt }`), set in mock-data.js `room_photos`. Files live in `assets/images/rooms/` with sources and licenses in `CREDITS.md` — add an entry for every new photo.
+- Render photos with `HRS.views.roomMedia()` / `HRS.views.photo()` (alt text, lazy loading, `object-fit: cover`, gradient fallback on load errors). Do not write raw `<img>` tags for rooms.
 
 ## CSS rules — `assets/css/global.css` is the single source of truth
 

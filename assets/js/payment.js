@@ -22,6 +22,7 @@
     var payButton = qs('[data-region="pay-button"]');
 
     return HRS.data.getReservation(ref).then(function (r) {
+      if (HRS.session.denyReservation(r, '[data-region="payment-page"]')) return;
       HRS.ui.fillFields(document, { booking_reference: r.booking_reference });
       if (r.payment_status === 'paid' || r.status === 'cancelled') {
         HRS.ui.emptyState('[data-region="payment-page"]', {
@@ -84,6 +85,7 @@
     qs('[data-action="print"]').addEventListener('click', function () { window.print(); });
 
     return HRS.data.getReservation(ref).then(function (r) {
+      if (HRS.session.denyReservation(r, '[data-region="receipt"]')) return;
       return HRS.data.getPaymentForReservation(r.reservation_id).then(function (payment) {
         if (!payment) {
           HRS.ui.emptyState('[data-region="receipt"]', {

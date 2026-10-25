@@ -2,6 +2,7 @@
 $pageTitle   = 'Payment confirmation';
 $pageId      = 'payment-confirmation';
 $pageScripts = ['payment.js'];
+$pageRoles   = 'guest';
 require __DIR__ . '/../includes/header.php';
 ?>
 <main id="main" class="main-content">

@@ -1,9 +1,15 @@
 <?php
 /**
  * Side navigation for admin pages. Active link is set by assets/js/main.js.
+ * Pages shared with staff (reservations, reports) set $sharedSidebar = true
+ * and include both sidebars; main.js shows the one matching the demo role.
  */
 ?>
-        <aside class="sidebar" aria-label="Admin">
+        <aside class="sidebar" aria-label="Admin" data-nav="admin"<?= !empty($sharedSidebar) ? ' hidden' : '' ?>>
+            <div class="sidebar-brand">
+                <img src="<?= $baseUrl ?>assets/images/brand/logo-mark.svg" alt="" width="32" height="32">
+                <span>Admin console</span>
+            </div>
             <h2 class="sidebar-title">Administration</h2>
             <ul class="sidebar-nav">
                 <li><a class="sidebar-link" href="<?= $baseUrl ?>admin/dashboard.php">Dashboard</a></li>

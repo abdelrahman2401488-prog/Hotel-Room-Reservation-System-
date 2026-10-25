@@ -180,7 +180,7 @@
     var id = HRS.url.param('id');
     return HRS.data.getRoom(id).then(function (room) {
       var page = qs('[data-region="room-page"]');
-      document.title = room.title + ' | Aurelia Grand Hotel';
+      document.title = room.title + ' | ' + HRS.config.hotelName;
       HRS.ui.fillFields(page, {
         title: room.title,
         type_label: HRS.format.label(room.room_type),
@@ -190,11 +190,14 @@
         description: room.description
       });
 
-      HRS.dom.render('[data-region="gallery"]', [
-        HRS.views.roomMedia(room),
-        html`<div class="room-media room-media-${room.room_type} room-media-thumb"><span class="room-media-label">${room.view} view</span></div>`,
-        html`<div class="room-media room-media-${room.room_type} room-media-thumb"><span class="room-media-label">${room.bed_type}</span></div>`
-      ]);
+      // Main photo + up to two gallery photos; rooms without extra photos
+      // (e.g. newly added ones) show only the main photo.
+      var gallery = (room.gallery || []).slice(0, 2);
+      var galleryEl = qs('[data-region="gallery"]');
+      galleryEl.classList.toggle('gallery-single', !gallery.length);
+      HRS.dom.render(galleryEl, [HRS.views.roomMedia(room, '', { eager: true })].concat(gallery.map(function (g) {
+        return HRS.views.photo(g.url, g.alt, 'room-media-thumb room-media-' + room.room_type);
+      })));
       HRS.dom.render('[data-region="room-facts"]', HRS.views.detailList([
         ['Sleeps', HRS.format.plural(room.capacity, 'guest')],
         ['Beds', room.bed_type],
@@ -315,6 +318,7 @@
     var ref = HRS.url.param('ref');
     qs('[data-action="print"]').addEventListener('click', function () { window.print(); });
     return HRS.data.getReservation(ref).then(function (r) {
+      if (HRS.session.denyReservation(r, '[data-region="confirmation"]')) return;
       var paid = r.payment_status === 'paid';
       HRS.ui.fillFields(document, { booking_reference: r.booking_reference });
       if (paid) {
@@ -326,6 +330,7 @@
       }
       qs('[data-region="payment-alert"]').hidden = paid || r.status === 'cancelled';
       HRS.dom.render('[data-region="status-badges"]', html`${HRS.views.statusBadge(r.status)} ${HRS.views.statusBadge(r.payment_status)}`);
+      if (r.room) HRS.dom.render('[data-region="room-photo"]', HRS.views.roomMedia(r.room, '', { label: r.room.title, eager: true }));
       HRS.dom.render('[data-region="details"]', HRS.views.detailList([
         ['Room', r.room ? r.room.title + ' · Room ' + r.room.room_number : '—'],
         ['Check-in', HRS.format.date(r.check_in_date) + ' from ' + HRS.mockData.settings.check_in_time],

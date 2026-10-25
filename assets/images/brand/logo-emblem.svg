@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="title">
+  <title id="title">The Developers Hotel emblem</title>
+  <!-- Symbol only, transparent, for dark backgrounds -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 54V28a18 18 0 0 1 36 0v26" stroke="#c8a24a" stroke-width="3.5"/>
+    <path d="M20 54V30a12 12 0 0 1 24 0v24" stroke="#f7f3ec" stroke-opacity=".55" stroke-width="1.5"/>
+    <path d="M9 54h46" stroke="#c8a24a" stroke-width="3.5"/>
+    <path d="M27.5 36.5 23 41l4.5 4.5M36.5 36.5 41 41l-4.5 4.5M33.6 34.5l-3.2 13" stroke="#f7f3ec" stroke-width="2.6"/>
+  </g>
+  <path d="M32 5.5 36 10l-4 4.5-4-4.5z" fill="#c8a24a"/>
+</svg>
