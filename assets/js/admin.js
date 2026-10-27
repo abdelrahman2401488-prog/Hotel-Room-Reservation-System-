@@ -445,7 +445,7 @@
               <td>${range}</td>
               <td>
                 <label class="sr-only" for="rate-${type.room_type}">Base rate for ${type.label}</label>
-                <input class="form-control" type="number" id="rate-${type.room_type}" name="base_price_${type.room_type}" min="20" max="10000" step="5" value="${type.base_price}">
+                <input class="form-control" type="number" id="rate-${type.room_type}" name="base_price_${type.room_type}" min="20" max="100000" step="5" value="${type.base_price}">
                 <label class="form-check text-xs mt-1" for="apply-${type.room_type}"><input type="checkbox" id="apply-${type.room_type}" name="apply_${type.room_type}" value="1"> Apply to all ${type.label.toLowerCase()} rooms</label>
               </td>
               <td class="text-right"><button class="btn btn-outline btn-sm" type="button" data-action="save-rate" data-type="${type.room_type}">Save</button></td>
@@ -503,8 +503,9 @@
         HRS.ui.setLoading(submit, true, 'Saving…');
         return HRS.data.saveSettings(values).then(function (s) {
           HRS.ui.setLoading(submit, false);
-          HRS.ui.toast('Settings saved (demo, this browser): check-in ' + s.check_in_time + ', check-out ' + s.check_out_time + ', prices in ' + s.currency + '.', { type: 'success' });
-          return refreshAll();
+          HRS.currency.select(s.currency);
+          HRS.ui.flash('Settings saved (demo, this browser): check-in ' + s.check_in_time + ', check-out ' + s.check_out_time + ', prices in ' + s.currency + '.', { type: 'success' });
+          window.location.reload();
         });
       }
     });
