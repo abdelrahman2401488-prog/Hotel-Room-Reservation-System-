@@ -56,12 +56,12 @@
         </div>
     </footer>
 
-    <script src="<?= $baseUrl ?>assets/js/main.js"></script>
-    <script src="<?= $baseUrl ?>assets/js/validation.js"></script>
-    <script src="<?= $baseUrl ?>assets/js/mock-data.js"></script>
-    <script src="<?= $baseUrl ?>assets/js/data-service.js"></script>
+    <script src="<?= $baseUrl ?>assets/js/main.js?v=<?= filemtime(__DIR__ . '/../assets/js/main.js') ?>"></script>
+    <script src="<?= $baseUrl ?>assets/js/validation.js?v=<?= filemtime(__DIR__ . '/../assets/js/validation.js') ?>"></script>
+    <script src="<?= $baseUrl ?>assets/js/mock-data.js?v=<?= filemtime(__DIR__ . '/../assets/js/mock-data.js') ?>"></script>
+    <script src="<?= $baseUrl ?>assets/js/data-service.js?v=<?= filemtime(__DIR__ . '/../assets/js/data-service.js') ?>"></script>
 <?php foreach ($pageScripts as $script): ?>
-    <script src="<?= $baseUrl ?>assets/js/<?= htmlspecialchars($script) ?>"></script>
+    <script src="<?= $baseUrl ?>assets/js/<?= htmlspecialchars($script) ?>?v=<?= filemtime(__DIR__ . '/../assets/js/' . $script) ?>"></script>
 <?php endforeach; ?>
 </body>
 </html>
