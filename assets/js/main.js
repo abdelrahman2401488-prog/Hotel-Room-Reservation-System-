@@ -133,16 +133,36 @@ window.HRS = window.HRS || {};
      Formatting
      ------------------------------------------------------------------ */
 
-  // NFR-25: the single price formatter. Uses the admin currency setting
-  // (HRS.settings.currency, default EGP). Whole amounts show no decimals
-  // (EGP 340); anything else shows exactly two (EGP 995.90). Changing the
-  // currency changes the label only — amounts are never converted.
+  // NFR-25: the single price formatter. All prices are stored and calculated
+  // in EGP; amounts are converted only when displayed, into the visitor's
+  // chosen currency (navbar selector, saved in localStorage "hrs_currency"),
+  // else the admin default (HRS.settings.currency), else EGP. Whole amounts
+  // show no decimals (EGP 340); anything else shows exactly two (EGP 995.90).
   var currencyFormatters = {};
+  var CURRENCY_KEY = 'hrs_currency';
+
+  // Fixed exchange rates (1 EGP = x), from exchangerate-api.com (open.er-api.com),
+  // updated 27 Oct 2026. The project has no live rate service, so these do
+  // not change by themselves — update them here when needed.
+  // BACKEND INTEGRATION: PHP could supply current rates from a rates API.
+  HRS.currency = {
+    base: 'EGP',
+    rates: { EGP: 1, USD: 0.017772, EUR: 0.015896 },
+    ratesDate: '2026-10-27'
+  };
 
   function currencyCode() {
+    var chosen = null;
+    try { chosen = localStorage.getItem(CURRENCY_KEY); } catch (e) { chosen = null; }
+    if (HRS.currency.rates[chosen]) return chosen;
     var settings = HRS.settings;
-    return (settings && settings.currency) || HRS.config.currency;
+    return (settings && HRS.currency.rates[settings.currency] && settings.currency) || HRS.config.currency;
   }
+
+  HRS.currency.select = function (code) {
+    if (!HRS.currency.rates[code]) return;
+    try { localStorage.setItem(CURRENCY_KEY, code); } catch (e) { /* not persisted */ }
+  };
 
   function currencyFormatter(code, cents) {
     var key = code + (cents ? ':2' : ':0');
@@ -155,9 +175,12 @@ window.HRS = window.HRS || {};
   }
 
   HRS.format = {
-    currency: function (amount) {
-      var value = Math.round((Number(amount) || 0) * 100) / 100;
-      return currencyFormatter(currencyCode(), !Number.isInteger(value)).format(value);
+    // amount is in EGP. Pass code (e.g. 'EGP') to format in that currency
+    // instead of the selected one (used where stored EGP values are shown).
+    currency: function (amount, code) {
+      code = HRS.currency.rates[code] ? code : currencyCode();
+      var value = Math.round((Number(amount) || 0) * HRS.currency.rates[code] * 100) / 100;
+      return currencyFormatter(code, !Number.isInteger(value)).format(value);
     },
     currencyCode: currencyCode,
     number: function (n) { return new Intl.NumberFormat(HRS.config.locale).format(Number(n) || 0); },
@@ -855,7 +878,16 @@ window.HRS = window.HRS || {};
     initGlobalHandlers();
     initIdleWatch();
     // NFR-25: currency labels in static markup, e.g. "Price per night (EGP)"
-    HRS.dom.qsa('[data-currency-code]').forEach(function (el) { el.textContent = HRS.format.currencyCode(); });
+    // Price inputs (room form, base rates) edit the stored EGP values, so their labels stay EGP
+    HRS.dom.qsa('[data-currency-code]').forEach(function (el) { el.textContent = HRS.currency.base; });
+    // Currency selector: save the choice and reload so every price re-renders in it
+    HRS.dom.qsa('[data-action="select-currency"]').forEach(function (select) {
+      select.value = HRS.format.currencyCode();
+      select.addEventListener('change', function () {
+        HRS.currency.select(select.value);
+        window.location.reload();
+      });
+    });
     // NFR-23: admin-configured times in static markup, e.g. data-setting="check_in_time"
     HRS.dom.qsa('[data-setting]').forEach(function (el) {
       var value = HRS.settings && HRS.settings[el.dataset.setting];

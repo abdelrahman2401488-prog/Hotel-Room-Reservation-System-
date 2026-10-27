@@ -43,7 +43,7 @@
   HRS.mockData = {
     settings: {
       hotel_name: 'The Developers Hotel',
-      currency: 'EGP',          // NFR-25 default; admins can change it (display only, amounts are not converted)
+      currency: 'EGP',          // default display currency; all stored prices are EGP (converted only for display)
       tax_rate: 0.14,
       service_rate: 0.12,
       free_cancellation_hours: 48,

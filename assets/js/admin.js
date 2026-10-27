@@ -226,7 +226,7 @@
       var v = values();
       HRS.dom.render('[data-region="room-preview"]', HRS.views.roomCard(v, { badge: HRS.views.statusBadge(v.status), cta: 'Preview' }));
       var type = roomTypes.filter(function (t) { return t.room_type === form.elements.room_type.value; })[0];
-      qs('[data-region="base-rate-hint"]').textContent = type ? 'Base rate for ' + type.label + ': ' + HRS.format.currency(type.base_price) : '';
+      qs('[data-region="base-rate-hint"]').textContent = type ? 'Base rate for ' + type.label + ': ' + HRS.format.currency(type.base_price, 'EGP') : '';
     }
 
     form.elements.room_type.addEventListener('change', function () {
@@ -503,7 +503,6 @@
         HRS.ui.setLoading(submit, true, 'Saving…');
         return HRS.data.saveSettings(values).then(function (s) {
           HRS.ui.setLoading(submit, false);
-          HRS.dom.qsa('[data-currency-code]').forEach(function (el) { el.textContent = s.currency; });
           HRS.ui.toast('Settings saved (demo, this browser): check-in ' + s.check_in_time + ', check-out ' + s.check_out_time + ', prices in ' + s.currency + '.', { type: 'success' });
           return refreshAll();
         });

@@ -234,8 +234,9 @@
     } catch (e) { /* never block the logged action */ }
   }
 
+  // Activity log text records the stored EGP amount, whatever currency the user views
   function money(amount) {
-    return HRS.format && HRS.format.currency ? HRS.format.currency(amount) : String(amount);
+    return HRS.format && HRS.format.currency ? HRS.format.currency(amount, 'EGP') : String(amount);
   }
 
   /* ------------------------------------------------------------------

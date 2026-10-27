@@ -590,6 +590,14 @@ body.is-redirecting #main {
   color: var(--color-text-inverse);
 }
 
+/* Currency selector in the navbar (assets/js/main.js) */
+.navbar-currency {
+  width: auto;
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
 .navbar-menu .btn-ghost:hover {
   background-color: var(--color-inverse-soft);
   color: var(--color-text-inverse);

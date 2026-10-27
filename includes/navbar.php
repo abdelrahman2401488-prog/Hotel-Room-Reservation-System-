@@ -36,6 +36,14 @@
                 <li data-nav="staff admin" hidden><a class="navbar-link" href="<?= $baseUrl ?>reports/booking_reports.php">Reports</a></li>
 
                 <li><button class="btn btn-ghost btn-sm" type="button" data-action="toggle-language" data-no-i18n lang="ar" aria-label="التبديل إلى العربية">العربية</button></li>
+                <li>
+                    <label class="sr-only" for="currency-select">Currency</label>
+                    <select class="navbar-currency" id="currency-select" data-action="select-currency" data-no-i18n>
+                        <option value="EGP">EGP</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                </li>
                 <li data-nav="public"><a class="navbar-link" href="<?= $baseUrl ?>login.php">Sign in</a></li>
                 <li data-nav="public"><a class="btn btn-accent btn-sm" href="<?= $baseUrl ?>register.php">Register</a></li>
                 <li data-nav="guest staff admin" hidden>

@@ -41,7 +41,7 @@ require __DIR__ . '/../includes/header.php';
                                 </select>
                             </div>
                         </div>
-                        <p class="form-help mb-0">Demo: saved in this browser only. Changing the currency changes how prices are labelled; amounts are not converted.</p>
+                        <p class="form-help mb-0">Demo: saved in this browser only. The currency is the default display currency for visitors who have not chosen one in the navbar. Prices are stored in EGP and converted for display.</p>
                         <div class="form-actions">
                             <button class="btn btn-primary" type="submit">Save settings</button>
                         </div>
