@@ -51,7 +51,9 @@
   HRS.pages['manage-bookings'] = function () {
     var form = qs('[data-form="booking-filters"]');
     var statusForm = qs('[data-form="status-change"]');
-    var rows = [];
+    var rows = []; // all filtered rows (actions + CSV export); only one page is rendered
+    // NFR-19: 10 reservations per page; filters go back to page 1
+    var pager = HRS.ui.pager('[data-region="pager"]', { pageSize: 10, onChange: render });
 
     ['status', 'query'].forEach(function (name) { if (HRS.url.param(name)) form.elements[name].value = HRS.url.param(name); });
 
@@ -74,11 +76,12 @@
         rows = results[0];
         renderStats(results[1]);
         qs('[data-region="row-count"]').textContent = 'Showing ' + HRS.format.plural(rows.length, 'reservation') + ' (demo data).';
+        var pageRows = pager.slice(rows);
         if (!rows.length) {
           HRS.dom.render('[data-region="booking-rows"]', html`<tr><td colspan="8" class="table-empty">No reservations match these filters.</td></tr>`);
           return;
         }
-        HRS.dom.render('[data-region="booking-rows"]', rows.map(function (r) {
+        HRS.dom.render('[data-region="booking-rows"]', pageRows.map(function (r) {
           var ref = { ref: r.booking_reference };
           return html`<tr>
               <td><a class="font-mono font-semibold" href="${HRS.url.to('reservations/booking_status.php', ref)}">${r.booking_reference}</a></td>
@@ -151,10 +154,11 @@
       HRS.ui.toast('Exported ' + HRS.format.plural(rows.length, 'row') + ' from demo data.', { type: 'success' });
     });
 
-    form.addEventListener('input', function (event) { if (event.target.type === 'search') render(); });
-    form.addEventListener('change', render);
-    form.addEventListener('reset', function () { setTimeout(render, 0); });
-    form.addEventListener('submit', function (event) { event.preventDefault(); render(); });
+    function refilter() { pager.reset(); return render(); }
+    form.addEventListener('input', function (event) { if (event.target.type === 'search') refilter(); });
+    form.addEventListener('change', refilter);
+    form.addEventListener('reset', function () { setTimeout(refilter, 0); });
+    form.addEventListener('submit', function (event) { event.preventDefault(); refilter(); });
     return render();
   };
 
@@ -218,6 +222,7 @@
       var stay = HRS.booking.bindStayPricing({
         form: form, getRoom: selectedRoom, inName: 'check_in_date', outName: 'check_out_date',
         excludeReservationId: r.reservation_id,
+        originalCheckIn: r.check_in_date, // NFR-24: an unchanged past check-in stays valid
         availabilityEl: qs('[data-region="availability"]'),
         quoteEl: qs('[data-region="quote"]'),
         onChange: difference
@@ -323,8 +328,8 @@
       var paid = r.payment_status === 'paid';
       var inHouse = r.status === 'checked-in' || r.status === 'checked-out';
       steps.push({ title: paid ? 'Payment received' : 'Awaiting payment', meta: paid ? 'Booking confirmed' : 'Pay online or at the hotel', done: paid || r.status === 'confirmed', active: !paid && r.status === 'pending' });
-      steps.push({ title: 'Check-in', meta: HRS.format.date(r.check_in_date) + ' from ' + HRS.mockData.settings.check_in_time, done: inHouse, active: !inHouse && (paid || r.status === 'confirmed') });
-      steps.push({ title: 'Check-out', meta: HRS.format.date(r.check_out_date) + ' by ' + HRS.mockData.settings.check_out_time, done: r.status === 'checked-out', active: r.status === 'checked-in' });
+      steps.push({ title: 'Check-in', meta: HRS.format.date(r.check_in_date) + ' from ' + HRS.settings.check_in_time, done: inHouse, active: !inHouse && (paid || r.status === 'confirmed') });
+      steps.push({ title: 'Check-out', meta: HRS.format.date(r.check_out_date) + ' by ' + HRS.settings.check_out_time, done: r.status === 'checked-out', active: r.status === 'checked-in' });
     }
     return html`<ol class="timeline">${steps.map(function (s) {
       var cls = s.cancelled ? 'is-cancelled' : s.done ? 'is-complete' : s.active ? 'is-active' : '';

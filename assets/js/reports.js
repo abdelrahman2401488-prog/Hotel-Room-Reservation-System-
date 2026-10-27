@@ -83,8 +83,25 @@
 
   HRS.pages['booking-reports'] = function () {
     var current = [];
+    // NFR-19: 10 rows per page; Previous/Next only redraws the table, filters reset to page 1
+    var pager = HRS.ui.pager('[data-region="pager"]', { pageSize: 10, onChange: renderRows });
+
+    function renderRows() {
+      HRS.dom.render('[data-region="report-rows"]', current.length ? pager.slice(current).map(function (r) {
+        return html`<tr>
+            <td class="font-mono">${r.booking_reference}</td>
+            <td>${r.guest_name}</td>
+            <td>${r.room ? HRS.format.label(r.room.room_type) : '—'}</td>
+            <td>${HRS.format.date(r.check_in_date)}</td>
+            <td class="num">${r.nights}</td>
+            <td class="num">${HRS.format.currency(r.total_price)}</td>
+            <td>${HRS.views.statusBadge(r.status)}</td>
+          </tr>`;
+      }) : (pager.slice([]), html`<tr><td colspan="7" class="table-empty">No bookings in this range.</td></tr>`));
+    }
 
     function render(f) {
+      pager.reset();
       return HRS.data.getReservations().then(function (all) {
         current = all.filter(function (r) { return matches(r, f); })
           .sort(function (a, b) { return a.check_in_date.localeCompare(b.check_in_date); });
@@ -113,17 +130,7 @@
           return { label: HRS.format.label(type), value: Math.round(avg * 10), display: avg ? avg.toFixed(1) + ' nights' : '—' };
         }), 'accent');
 
-        HRS.dom.render('[data-region="report-rows"]', current.length ? current.map(function (r) {
-          return html`<tr>
-              <td class="font-mono">${r.booking_reference}</td>
-              <td>${r.guest_name}</td>
-              <td>${r.room ? HRS.format.label(r.room.room_type) : '—'}</td>
-              <td>${HRS.format.date(r.check_in_date)}</td>
-              <td class="num">${r.nights}</td>
-              <td class="num">${HRS.format.currency(r.total_price)}</td>
-              <td>${HRS.views.statusBadge(r.status)}</td>
-            </tr>`;
-        }) : html`<tr><td colspan="7" class="table-empty">No bookings in this range.</td></tr>`);
+        renderRows();
       });
     }
 
@@ -142,8 +149,25 @@
 
   HRS.pages['revenue-reports'] = function () {
     var payments = [];
+    // NFR-19: 10 payments per page; Previous/Next only redraws the table, filters reset to page 1
+    var pager = HRS.ui.pager('[data-region="pager"]', { pageSize: 10, onChange: renderRows });
+
+    function renderRows() {
+      HRS.dom.render('[data-region="report-rows"]', payments.length ? pager.slice(payments).map(function (p) {
+        return html`<tr>
+            <td class="font-mono text-xs">${p.transaction_ref}</td>
+            <td class="font-mono">${p.reservation.booking_reference}</td>
+            <td>${p.reservation.guest_name}</td>
+            <td>${METHOD_LABELS[p.payment_method] || p.payment_method}${p.card_last4 ? ' ·' + p.card_last4 : ''}</td>
+            <td>${HRS.format.date(p.paid_at)}</td>
+            <td class="num">${HRS.format.currency(p.amount)}</td>
+            <td>${HRS.views.statusBadge(p.status)}</td>
+          </tr>`;
+      }) : (pager.slice([]), html`<tr><td colspan="7" class="table-empty">No payments in this range.</td></tr>`));
+    }
 
     function render(f) {
+      pager.reset();
       return Promise.all([HRS.data.getReservations(), HRS.data.getPayments()]).then(function (results) {
         var bookings = results[0].filter(function (r) { return matches(r, f); });
         var active = bookings.filter(function (r) { return r.status !== 'cancelled'; });
@@ -167,17 +191,7 @@
         chart('[data-region="by-month"]', monthRows(active, revenue, HRS.format.currency));
         chart('[data-region="by-type"]', typeRows(active, revenue, HRS.format.currency), 'accent');
 
-        HRS.dom.render('[data-region="report-rows"]', payments.length ? payments.map(function (p) {
-          return html`<tr>
-              <td class="font-mono text-xs">${p.transaction_ref}</td>
-              <td class="font-mono">${p.reservation.booking_reference}</td>
-              <td>${p.reservation.guest_name}</td>
-              <td>${METHOD_LABELS[p.payment_method] || p.payment_method}${p.card_last4 ? ' ·' + p.card_last4 : ''}</td>
-              <td>${HRS.format.date(p.paid_at)}</td>
-              <td class="num">${HRS.format.currency(p.amount)}</td>
-              <td>${HRS.views.statusBadge(p.status)}</td>
-            </tr>`;
-        }) : html`<tr><td colspan="7" class="table-empty">No payments in this range.</td></tr>`);
+        renderRows();
       });
     }
 

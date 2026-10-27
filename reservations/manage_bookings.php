@@ -81,6 +81,7 @@ require __DIR__ . '/../includes/header.php';
                         </tbody>
                     </table>
                 </div>
+                <div data-region="pager"></div>
                 <p class="text-sm text-muted mt-2" data-region="row-count"></p>
             </div>
         </div>

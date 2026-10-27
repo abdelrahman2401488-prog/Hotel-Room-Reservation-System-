@@ -14,12 +14,24 @@
   var html = HRS.dom.html;
   var today = HRS.date.today();
 
+  // NFR-24: check-in from today up to 365 days ahead; check-out from the
+  // next day up to 30 nights after check-in (HRS.pricing.rules). The same
+  // rules are enforced again in HRS.data.createReservation.
   function setDateLimits(checkIn, checkOut) {
+    var rules = HRS.pricing.rules;
     checkIn.min = today;
-    checkOut.min = HRS.date.addDays(checkIn.value || today, 1);
+    checkIn.max = HRS.date.addDays(today, rules.max_advance_days);
+    checkIn.dataset.errorMax = 'Bookings can be made up to ' + rules.max_advance_days + ' days in advance (latest check-in ' + HRS.format.date(checkIn.max) + ').';
+    function syncCheckOut() {
+      var base = checkIn.value || today;
+      checkOut.min = HRS.date.addDays(base, 1);
+      checkOut.max = HRS.date.addDays(base, rules.max_nights);
+      checkOut.dataset.errorMax = 'Stays are limited to ' + rules.max_nights + ' nights. Choose a check-out on or before ' + HRS.format.date(checkOut.max) + '.';
+    }
+    syncCheckOut();
     checkIn.addEventListener('change', function () {
       if (!checkIn.value) return;
-      checkOut.min = HRS.date.addDays(checkIn.value, 1);
+      syncCheckOut();
       if (!checkOut.value || checkOut.value <= checkIn.value) checkOut.value = HRS.date.addDays(checkIn.value, 1);
     });
   }
@@ -48,6 +60,12 @@
       var current = ++token;
       if (!room || !ci || !co || co <= ci) {
         HRS.dom.render(options.availabilityEl, '');
+        HRS.dom.render(options.quoteEl, HRS.views.summaryList(null));
+        return Promise.resolve(false);
+      }
+      var stayError = HRS.pricing.validateStay(ci, co, { allowPastCheckIn: ci === options.originalCheckIn });
+      if (stayError) {
+        HRS.dom.render(options.availabilityEl, html`<div class="alert alert-error mb-0"><span>${stayError.message}</span></div>`);
         HRS.dom.render(options.quoteEl, HRS.views.summaryList(null));
         return Promise.resolve(false);
       }
@@ -333,8 +351,8 @@
       if (r.room) HRS.dom.render('[data-region="room-photo"]', HRS.views.roomMedia(r.room, '', { label: r.room.title, eager: true }));
       HRS.dom.render('[data-region="details"]', HRS.views.detailList([
         ['Room', r.room ? r.room.title + ' · Room ' + r.room.room_number : '—'],
-        ['Check-in', HRS.format.date(r.check_in_date) + ' from ' + HRS.mockData.settings.check_in_time],
-        ['Check-out', HRS.format.date(r.check_out_date) + ' by ' + HRS.mockData.settings.check_out_time],
+        ['Check-in', HRS.format.date(r.check_in_date) + ' from ' + HRS.settings.check_in_time],
+        ['Check-out', HRS.format.date(r.check_out_date) + ' by ' + HRS.settings.check_out_time],
         ['Length of stay', HRS.format.plural(r.nights, 'night')],
         ['Guests', r.num_guests],
         ['Lead guest', r.guest_name],

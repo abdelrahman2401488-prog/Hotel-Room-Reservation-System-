@@ -41,6 +41,30 @@
       form.querySelector('[type="submit"]').focus();
     });
 
+    // NFR-11 (DEMO): while sign-in is locked after 5 failures, show why and
+    // disable the form until the lock ends (authenticate() also refuses).
+    var submitButton = form.querySelector('[type="submit"]');
+    var lockAlert = document.createElement('div');
+    lockAlert.className = 'alert alert-error';
+    lockAlert.setAttribute('role', 'alert');
+    lockAlert.hidden = true;
+    form.parentElement.insertBefore(lockAlert, form);
+    var unlockTimer = null;
+
+    function showLock(lockedUntil) {
+      var minutes = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 60000));
+      lockAlert.innerHTML = render(html`<span><strong>Demo sign-in locked.</strong> Too many failed attempts. Try again in ${HRS.format.plural(minutes, 'minute')} (at ${new Date(lockedUntil).toLocaleTimeString(HRS.config.locale, { hour: '2-digit', minute: '2-digit' })}). This lockout is a frontend demo, not server-side security.</span>`);
+      lockAlert.hidden = false;
+      submitButton.disabled = true;
+      clearTimeout(unlockTimer);
+      unlockTimer = setTimeout(function () {
+        lockAlert.hidden = true;
+        submitButton.disabled = false;
+      }, Math.max(0, lockedUntil - Date.now()) + 500);
+    }
+
+    HRS.data.getLoginLock().then(function (lock) { if (lock.locked) showLock(lock.locked_until); });
+
     HRS.validation.attach(form, {
       onSubmit: function (values, form, submit) {
         HRS.ui.setLoading(submit, true, 'Signing in…');
@@ -50,6 +74,14 @@
           redirectAfterLogin(user);
         }, function (error) {
           form.elements.password.value = '';
+          if (error.locked) {
+            // Handle fully here (not re-thrown): the shared error handler
+            // would re-enable the submit button that the lock disables.
+            HRS.ui.setLoading(submit, false);
+            HRS.validation.setError(form.elements.password, error.message);
+            showLock(error.locked_until);
+            return;
+          }
           throw error;
         });
       }

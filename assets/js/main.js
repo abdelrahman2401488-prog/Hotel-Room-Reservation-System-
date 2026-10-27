@@ -26,7 +26,7 @@ window.HRS = window.HRS || {};
     // Roles allowed on this page ("" = public), from $pageRoles in PHP
     pageRoles: (document.body.dataset.roles || '').split(',').map(function (r) { return r.trim(); }).filter(Boolean),
     hotelName: 'The Developers Hotel',
-    currency: 'USD',
+    currency: 'EGP', // fallback only; the admin setting (HRS.settings.currency) wins
     locale: 'en-US'
   };
 
@@ -133,19 +133,33 @@ window.HRS = window.HRS || {};
      Formatting
      ------------------------------------------------------------------ */
 
-  // Whole amounts show no cents ($340); anything else shows exactly two ($995.90)
-  var wholeFormatter = new Intl.NumberFormat(HRS.config.locale, {
-    style: 'currency', currency: HRS.config.currency, maximumFractionDigits: 0, minimumFractionDigits: 0
-  });
-  var centsFormatter = new Intl.NumberFormat(HRS.config.locale, {
-    style: 'currency', currency: HRS.config.currency, maximumFractionDigits: 2, minimumFractionDigits: 2
-  });
+  // NFR-25: the single price formatter. Uses the admin currency setting
+  // (HRS.settings.currency, default EGP). Whole amounts show no decimals
+  // (EGP 340); anything else shows exactly two (EGP 995.90). Changing the
+  // currency changes the label only — amounts are never converted.
+  var currencyFormatters = {};
+
+  function currencyCode() {
+    var settings = HRS.settings;
+    return (settings && settings.currency) || HRS.config.currency;
+  }
+
+  function currencyFormatter(code, cents) {
+    var key = code + (cents ? ':2' : ':0');
+    if (!currencyFormatters[key]) {
+      currencyFormatters[key] = new Intl.NumberFormat(HRS.config.locale, {
+        style: 'currency', currency: code, maximumFractionDigits: cents ? 2 : 0, minimumFractionDigits: cents ? 2 : 0
+      });
+    }
+    return currencyFormatters[key];
+  }
 
   HRS.format = {
     currency: function (amount) {
       var value = Math.round((Number(amount) || 0) * 100) / 100;
-      return (Number.isInteger(value) ? wholeFormatter : centsFormatter).format(value);
+      return currencyFormatter(currencyCode(), !Number.isInteger(value)).format(value);
     },
+    currencyCode: currencyCode,
     number: function (n) { return new Intl.NumberFormat(HRS.config.locale).format(Number(n) || 0); },
     percent: function (ratio) { return Math.round((Number(ratio) || 0) * 100) + '%'; },
     date: function (iso, options) {
@@ -393,6 +407,43 @@ window.HRS = window.HRS || {};
       });
     },
 
+    // NFR-19: client-side pagination for the room, booking and report tables.
+    // pager(container, { pageSize, onChange }) -> { slice(rows), reset() }.
+    // slice() clamps the current page to the data (so deletes/filters never
+    // leave an invalid page), renders Previous/Next + "Page X of Y" into
+    // container and returns only the current page's rows. Call reset() when
+    // a filter changes to go back to page 1.
+    pager: function (container, options) {
+      var el = typeof container === 'string' ? document.querySelector(container) : container;
+      var size = options.pageSize || 10;
+      var page = 1;
+      el.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-page-step]');
+        if (!button || button.disabled) return;
+        page += Number(button.dataset.pageStep);
+        options.onChange();
+      });
+      return {
+        reset: function () { page = 1; },
+        page: function () { return page; },
+        slice: function (rows) {
+          var total = rows.length;
+          var pages = Math.max(1, Math.ceil(total / size));
+          page = Math.min(Math.max(1, page), pages);
+          var start = (page - 1) * size;
+          var end = Math.min(start + size, total);
+          el.hidden = total === 0;
+          el.innerHTML = total === 0 ? '' : toHtml(html`
+            <nav class="pagination" aria-label="Table pages">
+              <button class="btn btn-outline btn-sm" type="button" data-page-step="-1"${page === 1 ? HRS.dom.raw(' disabled') : ''}>Previous</button>
+              <span class="pagination-status" aria-live="polite">Page ${page} of ${pages} · ${start + 1}–${end} of ${total}</span>
+              <button class="btn btn-outline btn-sm" type="button" data-page-step="1"${page === pages ? HRS.dom.raw(' disabled') : ''}>Next</button>
+            </nav>`);
+          return rows.slice(start, end);
+        }
+      };
+    },
+
     // Download text as a file (CSV export)
     download: function (filename, text, mime) {
       var blob = new Blob([text], { type: mime || 'text/csv;charset=utf-8' });
@@ -555,6 +606,20 @@ window.HRS = window.HRS || {};
 
   var SESSION_KEY = 'hrs_demo_session';
   var ROLES = ['guest', 'staff', 'admin'];
+  // NFR-11 (DEMO): sign out after 30 minutes without user activity. The
+  // timestamp is in localStorage, so it is shared by tabs and survives
+  // refresh/navigation. Not a replacement for server-side session expiry.
+  var ACTIVITY_KEY = 'hrs_demo_last_activity';
+  var IDLE_LIMIT_MS = 30 * 60 * 1000;
+  var ACTIVITY_WRITE_EVERY_MS = 15 * 1000;
+
+  function readActivity() {
+    try { return Number(localStorage.getItem(ACTIVITY_KEY)) || 0; } catch (e) { return 0; }
+  }
+
+  function writeActivity(time) {
+    try { localStorage.setItem(ACTIVITY_KEY, String(time)); } catch (e) { /* ignore */ }
+  }
 
   function isValidSession(s) {
     return !!s && typeof s === 'object' && typeof s.user_id === 'number' && ROLES.indexOf(s.role) !== -1 &&
@@ -589,11 +654,38 @@ window.HRS = window.HRS || {};
     signIn: function (user) {
       var session = { user_id: user.user_id, full_name: user.full_name, email: user.email, phone: user.phone || '', role: user.role };
       try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) { /* ignore */ }
+      writeActivity(Date.now());
       return session;
     },
     signOut: function () {
-      try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
+      try { localStorage.removeItem(SESSION_KEY); localStorage.removeItem(ACTIVITY_KEY); } catch (e) { /* ignore */ }
     },
+    // True when a signed-in demo session has had no activity for 30 minutes.
+    // A session without a timestamp (signed in before this feature) starts now.
+    isIdleExpired: function () {
+      if (!HRS.session.current()) return false;
+      var last = readActivity();
+      if (!last) { writeActivity(Date.now()); return false; }
+      return Date.now() - last > IDLE_LIMIT_MS;
+    },
+    // Signs out an idle session and returns to login with a message.
+    // Returns true when it signed out.
+    checkIdle: function () {
+      if (!HRS.session.isIdleExpired()) return false;
+      HRS.session.signOut();
+      document.body.classList.add('is-redirecting');
+      HRS.ui.flash('You were signed out after 30 minutes of inactivity. Please sign in again.', { type: 'warning', title: 'Session timed out' });
+      var here = HRS.url.current();
+      window.location.replace(HRS.url.to('login.php', here === 'login.php' ? null : { redirect: here + window.location.search }));
+      return true;
+    },
+    // Records user activity (throttled). Never refreshes an already-expired session.
+    touch: function () {
+      if (!HRS.session.current() || HRS.session.checkIdle()) return;
+      var now = Date.now();
+      if (now - readActivity() >= ACTIVITY_WRITE_EVERY_MS) writeActivity(now);
+    },
+    idleLimitMs: IDLE_LIMIT_MS,
     hasRole: function (roles) {
       var user = HRS.session.current();
       return !!user && roles.indexOf(user.role) !== -1;
@@ -732,15 +824,43 @@ window.HRS = window.HRS || {};
     }
   }
 
+  // NFR-11: activity listeners are registered once per page load (each
+  // navigation is a full page load; the flag guards against re-runs).
+  function initIdleWatch() {
+    if (HRS.session._idleWatchActive) return;
+    HRS.session._idleWatchActive = true;
+    var touch = function () { HRS.session.touch(); };
+    ['pointerdown', 'keydown', 'touchstart', 'wheel'].forEach(function (type) {
+      document.addEventListener(type, touch, { passive: true, capture: true });
+    });
+    window.addEventListener('scroll', touch, { passive: true });
+    // Returning to a hidden tab: check expiry BEFORE counting it as activity
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && !HRS.session.checkIdle()) touch();
+    });
+    setInterval(function () { HRS.session.checkIdle(); }, 30 * 1000);
+  }
+
   // Synchronous first pass with the stored session (before paint), so the
   // right navigation shows immediately and restricted content is hidden.
+  // An idle-expired session is signed out here, before anything renders.
+  var idledOut = HRS.session.checkIdle();
   var storedUser = HRS.session.current();
   applyRoleNav(storedUser);
   if (guardTarget(storedUser)) document.body.classList.add('is-redirecting');
 
   document.addEventListener('DOMContentLoaded', function () {
+    if (idledOut) return; // redirecting to login
     initNavbar();
     initGlobalHandlers();
+    initIdleWatch();
+    // NFR-25: currency labels in static markup, e.g. "Price per night (EGP)"
+    HRS.dom.qsa('[data-currency-code]').forEach(function (el) { el.textContent = HRS.format.currencyCode(); });
+    // NFR-23: admin-configured times in static markup, e.g. data-setting="check_in_time"
+    HRS.dom.qsa('[data-setting]').forEach(function (el) {
+      var value = HRS.settings && HRS.settings[el.dataset.setting];
+      if (value) el.textContent = value;
+    });
     HRS.session.verify().then(function (user) {
       applyRoleNav(user);
       var target = guardTarget(user);

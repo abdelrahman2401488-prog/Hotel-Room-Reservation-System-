@@ -18,6 +18,36 @@ require __DIR__ . '/../includes/header.php';
                     <button class="btn btn-accent" type="button" data-action="new-rule">Add seasonal rule</button>
                 </div>
 
+                <!-- NFR-23 hotel settings. BACKEND INTEGRATION: POST to a PHP
+                     handler that validates and stores these in a settings table. -->
+                <section class="card mb-6" aria-labelledby="settings-title" id="hotel-settings">
+                    <div class="card-header"><h2 class="text-lg mb-0" id="settings-title">Hotel settings</h2></div>
+                    <form class="card-body form" method="post" action="manage_pricing.php" data-form="hotel-settings">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label required" for="hs-check-in">Check-in time</label>
+                                <input class="form-control" type="time" id="hs-check-in" name="check_in_time" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="hs-check-out">Check-out time</label>
+                                <input class="form-control" type="time" id="hs-check-out" name="check_out_time" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="hs-currency">Currency</label>
+                                <select class="form-control" id="hs-currency" name="currency" required>
+                                    <option value="EGP">EGP — Egyptian pound</option>
+                                    <option value="USD">USD — US dollar</option>
+                                    <option value="EUR">EUR — Euro</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="form-help mb-0">Demo: saved in this browser only. Changing the currency changes how prices are labelled; amounts are not converted.</p>
+                        <div class="form-actions">
+                            <button class="btn btn-primary" type="submit">Save settings</button>
+                        </div>
+                    </form>
+                </section>
+
                 <section class="mb-6" aria-labelledby="rates-title">
                     <h2 class="text-xl" id="rates-title">Base rates</h2>
                     <!-- BACKEND INTEGRATION: POST updates room_types.base_price and
@@ -30,7 +60,7 @@ require __DIR__ . '/../includes/header.php';
                                         <th scope="col">Room type</th>
                                         <th scope="col">Rooms</th>
                                         <th scope="col">Current room prices</th>
-                                        <th scope="col">Base rate (USD)</th>
+                                        <th scope="col">Base rate (<span data-currency-code>EGP</span>)</th>
                                         <th scope="col" class="text-right">Save</th>
                                     </tr>
                                 </thead>

@@ -94,6 +94,9 @@
   function seed() {
     var mock = clone(HRS.mockData);
     COLLECTIONS.forEach(function (name) { state[name] = mock[name] || []; });
+    // Reset demo data also restores default settings and an empty activity log
+    state.settings = clone(HRS.mockData.settings);
+    state.audit_log = [];
 
     // Derive totals and payment records so the sample data is consistent
     state.reservations.forEach(function (r) {
@@ -116,6 +119,8 @@
 
     COLLECTIONS.forEach(persist);
     try { localStorage.setItem(PREFIX + 'version', VERSION); } catch (e) { /* ignore */ }
+    persist('settings');
+    persist('audit_log');
   }
 
   function load() {
@@ -131,15 +136,17 @@
       }
     } catch (e) { ok = false; }
     if (!ok) seed();
+    else loadExtraStores();
   }
 
   function respond(value) {
     return new Promise(function (resolve) { setTimeout(function () { resolve(clone(value)); }, LATENCY); });
   }
 
-  function fail(message, field) {
+  function fail(message, field, extra) {
     var error = new Error(message);
     if (field) error.field = field;
+    if (extra) Object.assign(error, extra);
     return new Promise(function (resolve, reject) { setTimeout(function () { reject(error); }, LATENCY); });
   }
 
@@ -169,7 +176,85 @@
     })[0] || null;
   }
 
-  function settings() { return HRS.mockData.settings; }
+  function settings() { return state.settings; }
+
+  /* ------------------------------------------------------------------
+     Stores added after data version 2 (hotel settings, activity log) are
+     kept under their own keys, so adding them does not reseed existing
+     demo data. Missing keys fall back to defaults.
+     ------------------------------------------------------------------ */
+
+  var CURRENCIES = ['EGP', 'USD', 'EUR'];
+
+  function readStore(name, fallback) {
+    try {
+      var raw = localStorage.getItem(PREFIX + name);
+      if (raw !== null) return JSON.parse(raw);
+    } catch (e) { /* unreadable: use the fallback */ }
+    return clone(fallback);
+  }
+
+  function loadExtraStores() {
+    state.settings = Object.assign(clone(HRS.mockData.settings), readStore('settings', {}));
+    if (CURRENCIES.indexOf(state.settings.currency) === -1) state.settings.currency = HRS.mockData.settings.currency;
+    state.audit_log = readStore('audit_log', []);
+    if (!Array.isArray(state.audit_log)) state.audit_log = [];
+  }
+
+  /* ------------------------------------------------------------------
+     NFR-26 Activity log (DEMO). Records price, booking and payment
+     actions with a timestamp, reference and short description. Never
+     records passwords or card details. Logging must never break the
+     action being logged, so every failure is swallowed.
+     BACKEND INTEGRATION: write these rows in PHP (activity_log table) in
+     the same transaction as the action itself.
+     ------------------------------------------------------------------ */
+
+  var AUDIT_MAX = 500;
+
+  function logActivity(action, reference, description) {
+    try {
+      var user = HRS.session && HRS.session.current ? HRS.session.current() : null;
+      var lastId = state.audit_log.reduce(function (max, e) { return Math.max(max, Number(e.log_id) || 0); }, 0);
+      state.audit_log.unshift({
+        log_id: lastId + 1,
+        action: action,
+        reference: reference === undefined || reference === null ? '' : String(reference),
+        description: description,
+        actor: user ? user.email : 'Signed-out visitor',
+        actor_role: user ? user.role : 'public',
+        created_at: new Date().toISOString()
+      });
+      if (state.audit_log.length > AUDIT_MAX) state.audit_log.length = AUDIT_MAX;
+      if (!persist('audit_log')) {
+        // Storage full: keep the newest entries only, in memory if necessary
+        state.audit_log.length = Math.min(state.audit_log.length, 100);
+        persist('audit_log');
+      }
+    } catch (e) { /* never block the logged action */ }
+  }
+
+  function money(amount) {
+    return HRS.format && HRS.format.currency ? HRS.format.currency(amount) : String(amount);
+  }
+
+  /* ------------------------------------------------------------------
+     NFR-23 / NFR-24 / NFR-11 constants (DEMO policy values)
+     ------------------------------------------------------------------ */
+
+  var BOOKING_RULES = { max_advance_days: 365, max_nights: 30 };
+  var LOGIN_POLICY = { max_attempts: 5, lock_minutes: 5 };
+  var memoryLoginGuard = { failures: 0, locked_until: 0 };
+
+  function readLoginGuard() {
+    var guard = readStore('login_guard', memoryLoginGuard);
+    return { failures: Number(guard.failures) || 0, locked_until: Number(guard.locked_until) || 0 };
+  }
+
+  function writeLoginGuard(guard) {
+    memoryLoginGuard = guard;
+    try { localStorage.setItem(PREFIX + 'login_guard', JSON.stringify(guard)); } catch (e) { /* memory only */ }
+  }
 
   /* ------------------------------------------------------------------
      Pricing & availability (client-side PREVIEW of server rules)
@@ -211,6 +296,31 @@
         tax: tax,
         total: Math.round((adjusted + serviceFee + tax) * 100) / 100
       };
+    },
+
+    rules: BOOKING_RULES,
+
+    // NFR-24: check-in within the next 365 days, check-out after check-in,
+    // at most 30 nights. Returns { field, message } or null. Used by the
+    // date inputs (booking.js) AND by createReservation/updateReservation,
+    // so bypassing the browser's min/max cannot create an invalid stay.
+    // options.allowPastCheckIn: keep an existing booking's past check-in.
+    // BACKEND INTEGRATION: PHP must apply the same rules.
+    validateStay: function (checkIn, checkOut, options) {
+      options = options || {};
+      var today = HRS.date.today();
+      var latestCheckIn = HRS.date.addDays(today, BOOKING_RULES.max_advance_days);
+      if (!HRS.date.parse(checkIn) || !/^\d{4}-\d{2}-\d{2}$/.test(checkIn)) return { field: 'check_in_date', message: 'Enter a valid check-in date.' };
+      if (!HRS.date.parse(checkOut) || !/^\d{4}-\d{2}-\d{2}$/.test(checkOut)) return { field: 'check_out_date', message: 'Enter a valid check-out date.' };
+      if (!options.allowPastCheckIn && checkIn < today) return { field: 'check_in_date', message: 'Check-in cannot be in the past.' };
+      if (checkIn > latestCheckIn) {
+        return { field: 'check_in_date', message: 'Bookings can be made up to ' + BOOKING_RULES.max_advance_days + ' days in advance (latest check-in ' + HRS.format.date(latestCheckIn) + ').' };
+      }
+      if (checkOut <= checkIn) return { field: 'check_out_date', message: 'Check-out must be after check-in.' };
+      if (HRS.date.diffDays(checkIn, checkOut) > BOOKING_RULES.max_nights) {
+        return { field: 'check_out_date', message: 'Stays are limited to ' + BOOKING_RULES.max_nights + ' nights. Choose a check-out on or before ' + HRS.format.date(HRS.date.addDays(checkIn, BOOKING_RULES.max_nights)) + '.' };
+      }
+      return null;
     },
 
     // Free cancellation until N hours before check-in, otherwise one night is charged
@@ -260,8 +370,46 @@
 
   HRS.pricing = pricing;
 
+  // Live read-only view of the hotel settings for synchronous formatting
+  // (currency in HRS.format.currency, check-in/out times in the UI).
+  Object.defineProperty(HRS, 'settings', { configurable: true, get: function () { return clone(state.settings); } });
+
   HRS.data = {
     getSettings: function () { return respond(settings()); },
+
+    // NFR-23: admin/manage_pricing.php "Hotel settings" form (DEMO, localStorage)
+    // BACKEND INTEGRATION: POST to a PHP handler that validates and stores settings.
+    saveSettings: function (data) {
+      var time = /^([01]\d|2[0-3]):[0-5]\d$/;
+      if (!time.test(data.check_in_time || '')) return fail('Enter a valid check-in time (HH:MM).', 'check_in_time');
+      if (!time.test(data.check_out_time || '')) return fail('Enter a valid check-out time (HH:MM).', 'check_out_time');
+      if (CURRENCIES.indexOf(data.currency) === -1) return fail('Choose one of: ' + CURRENCIES.join(', ') + '.', 'currency');
+      var before = clone(state.settings);
+      state.settings.check_in_time = data.check_in_time;
+      state.settings.check_out_time = data.check_out_time;
+      state.settings.currency = data.currency;
+      if (!persist('settings')) {
+        state.settings = before;
+        return fail('Settings could not be saved because this browser\'s storage is unavailable or full.');
+      }
+      return respond(settings());
+    },
+
+    currencies: function () { return CURRENCIES.slice(); },
+
+    // NFR-26: admin/activity_log.php. filters: category ('price' | 'booking' | 'payment')
+    getActivityLog: function (filters) {
+      filters = filters || {};
+      return respond(state.audit_log.filter(function (e) {
+        return !filters.category || e.action.split('.')[0] === filters.category;
+      }));
+    },
+
+    // NFR-11: lockout state for the login page (DEMO)
+    getLoginLock: function () {
+      var guard = readLoginGuard();
+      return respond({ locked: guard.locked_until > Date.now(), locked_until: guard.locked_until, failures: guard.failures, max_attempts: LOGIN_POLICY.max_attempts, lock_minutes: LOGIN_POLICY.lock_minutes });
+    },
 
     /* ---- Rooms — admin/manage_rooms.php, guest/search_rooms.php ---- */
 
@@ -344,6 +492,11 @@
           ? 'The photo is too large for this browser\'s demo storage, so it is shown only until you leave this page.'
           : 'This browser\'s demo storage is full; changes are kept only until you leave this page.';
       }
+      if (!existing) {
+        logActivity('price.created', 'Room ' + room.room_number, 'Room ' + room.room_number + ' (' + room.title + ') added at ' + money(room.price_per_night) + ' per night.');
+      } else if (Number(existing.price_per_night) !== room.price_per_night) {
+        logActivity('price.updated', 'Room ' + room.room_number, 'Nightly price changed from ' + money(existing.price_per_night) + ' to ' + money(room.price_per_night) + '.');
+      }
       return respond(Object.assign(withImage(room), { storage_warning: warning }));
     },
 
@@ -373,6 +526,7 @@
     saveRoomTypeRate: function (roomType, basePrice, applyToRooms) {
       var type = state.room_types.filter(function (t) { return t.room_type === roomType; })[0];
       if (!type) return fail('Unknown room type.');
+      var previous = type.base_price;
       type.base_price = Number(basePrice);
       var updated = 0;
       if (applyToRooms) {
@@ -382,6 +536,8 @@
         persist('rooms');
       }
       persist('room_types');
+      logActivity('price.updated', type.label + ' base rate', 'Base rate changed from ' + money(previous) + ' to ' + money(type.base_price) +
+        (applyToRooms ? ' and applied to ' + HRS.format.plural(updated, 'room') : '') + '.');
       return respond({ room_type: type, rooms_updated: updated });
     },
 
@@ -402,6 +558,10 @@
       var index = state.pricing_rules.findIndex(function (r) { return r.rule_id === rule.rule_id; });
       if (index === -1) state.pricing_rules.push(rule); else state.pricing_rules[index] = rule;
       persist('pricing_rules');
+      logActivity(index === -1 ? 'price.rule_created' : 'price.rule_updated', 'Rule ' + rule.rule_id,
+        'Seasonal rule "' + rule.name + '": ' + (rule.adjustment_percent > 0 ? '+' : '') + rule.adjustment_percent + '% for ' +
+        (rule.room_type === 'all' ? 'all room types' : rule.room_type + ' rooms') + ', ' + rule.start_date + ' to ' + rule.end_date +
+        (rule.is_active ? '' : ' (inactive)') + '.');
       return respond(rule);
     },
 
@@ -410,12 +570,15 @@
       if (!rule) return fail('Rule not found.');
       rule.is_active = !rule.is_active;
       persist('pricing_rules');
+      logActivity('price.rule_updated', 'Rule ' + rule.rule_id, 'Seasonal rule "' + rule.name + '" ' + (rule.is_active ? 'activated' : 'paused') + '.');
       return respond(rule);
     },
 
     deletePricingRule: function (id) {
+      var removed = state.pricing_rules.filter(function (r) { return String(r.rule_id) === String(id); })[0];
       state.pricing_rules = state.pricing_rules.filter(function (r) { return String(r.rule_id) !== String(id); });
       persist('pricing_rules');
+      if (removed) logActivity('price.rule_deleted', 'Rule ' + removed.rule_id, 'Seasonal rule "' + removed.name + '" deleted.');
       return respond(true);
     },
 
@@ -469,6 +632,8 @@
     createReservation: function (data) {
       var room = findRoom(data.room_id);
       if (!room) return fail('Room not found.');
+      var stayError = pricing.validateStay(data.check_in_date, data.check_out_date);
+      if (stayError) return fail(stayError.message, stayError.field);
       if (!isAvailable(room.room_id, data.check_in_date, data.check_out_date)) {
         return fail('Room ' + room.room_number + ' is no longer available for those dates.', 'check_in_date');
       }
@@ -495,6 +660,9 @@
       };
       state.reservations.push(reservation);
       persist('reservations');
+      logActivity('booking.created', reservation.booking_reference, 'Booking for room ' + room.room_number + ', ' +
+        reservation.check_in_date + ' to ' + reservation.check_out_date + ', ' + HRS.format.plural(reservation.num_guests, 'guest') +
+        ', total ' + money(reservation.total_price) + ' (pending payment).');
       return respond(withRoom(reservation));
     },
 
@@ -506,6 +674,9 @@
       var next = Object.assign({}, r, changes);
       var room = findRoom(next.room_id);
       if (!room) return fail('Room not found.', 'room_id');
+      // Same NFR-24 rules; an unchanged past check-in (booking in progress) stays allowed
+      var stayError = pricing.validateStay(next.check_in_date, next.check_out_date, { allowPastCheckIn: next.check_in_date === r.check_in_date });
+      if (stayError) return fail(stayError.message, stayError.field);
       if (!isAvailable(room.room_id, next.check_in_date, next.check_out_date, r.reservation_id)) {
         return fail('Room ' + room.room_number + ' is not available for the new dates.', 'check_in_date');
       }
@@ -514,8 +685,11 @@
       next.num_guests = Number(next.num_guests);
       next.total_price = pricing.quote(room, next.check_in_date, next.check_out_date).total;
       next.updated_at = nowIso();
+      var previousTotal = r.total_price;
       Object.assign(r, next);
       persist('reservations');
+      logActivity('booking.modified', r.booking_reference, 'Changed to room ' + room.room_number + ', ' + r.check_in_date + ' to ' + r.check_out_date +
+        ', ' + HRS.format.plural(r.num_guests, 'guest') + '; total ' + money(previousTotal) + ' → ' + money(r.total_price) + '.');
       return respond(withRoom(r));
     },
 
@@ -537,6 +711,9 @@
         persist('payments');
       }
       persist('reservations');
+      logActivity('booking.cancelled', r.booking_reference, 'Booking cancelled' + (reason ? ' (' + reason + ')' : '') +
+        '; cancellation fee ' + money(terms.cancellation_fee) + '.');
+      if (terms.paid) logActivity('payment.refunded', r.booking_reference, 'Payment status paid → refunded; refund ' + money(terms.refund_amount) + ' (demo, no money moved).');
       return respond(Object.assign(withRoom(r), { refund: terms }));
     },
 
@@ -544,11 +721,20 @@
     setReservationStatus: function (refOrId, status, extra) {
       var r = findReservation(refOrId);
       if (!r) return fail('Booking not found.');
+      var previousStatus = r.status;
+      var previousPayment = r.payment_status;
       r.status = status;
       if (extra) Object.assign(r, extra);
       if (status === 'checked-in') { r.checked_in_at = nowIso(); updateRoomStatusSync(r.room_id, 'occupied'); }
       if (status === 'checked-out') { r.checked_out_at = nowIso(); updateRoomStatusSync(r.room_id, 'available'); }
       persist('reservations');
+      if (previousStatus !== status) {
+        logActivity(status === 'confirmed' ? 'booking.confirmed' : 'booking.status_changed', r.booking_reference,
+          'Booking status ' + previousStatus + ' → ' + status + '.');
+      }
+      if (previousPayment !== r.payment_status) {
+        logActivity('payment.status_changed', r.booking_reference, 'Payment status ' + previousPayment + ' → ' + r.payment_status + ' (recorded by staff).');
+      }
       return respond(withRoom(r));
     },
 
@@ -569,11 +755,17 @@
     // DEMO ONLY: no card data is stored or transmitted; only the last 4
     // digits are kept to render the receipt. A real integration must use a
     // payment gateway's hosted fields / tokenisation, never raw card numbers.
+    // Activity log: one "attempted" entry, then the real outcome. Only the
+    // payment method is logged — never card numbers, CVC or last digits.
     recordPayment: function (refOrId, details) {
       var r = findReservation(refOrId);
-      if (!r) return fail('Booking not found.');
-      if (r.payment_status === 'paid') return fail('This booking is already paid.');
-      if (r.status === 'cancelled') return fail('Cancelled bookings cannot be paid.');
+      var method = { card: 'card', wallet: 'digital wallet', pay_at_hotel: 'pay at hotel' }[details.payment_method] || 'unknown method';
+      logActivity('payment.attempted', r ? r.booking_reference : refOrId, 'Payment attempt via ' + method + (r ? ' for ' + money(r.total_price) : '') + '.');
+      var reason = !r ? 'Booking not found.' : r.payment_status === 'paid' ? 'This booking is already paid.' : r.status === 'cancelled' ? 'Cancelled bookings cannot be paid.' : '';
+      if (reason) {
+        logActivity('payment.failed', r ? r.booking_reference : refOrId, 'Payment rejected: ' + reason);
+        return fail(reason);
+      }
       var payment = {
         payment_id: nextId('payments', 'payment_id'),
         reservation_id: r.reservation_id,
@@ -586,10 +778,17 @@
         refund_amount: 0
       };
       state.payments.push(payment);
+      var previousStatus = r.status;
       if (payment.status === 'paid') r.payment_status = 'paid';
       if (r.status === 'pending') r.status = 'confirmed';
       persist('payments');
       persist('reservations');
+      if (payment.status === 'paid') {
+        logActivity('payment.succeeded', r.booking_reference, 'Simulated demo payment of ' + money(payment.amount) + ' via ' + method + ' recorded as paid (no money charged); payment status pending → paid.');
+      } else {
+        logActivity('payment.pending', r.booking_reference, 'Pay at hotel selected; payment status remains pending.');
+      }
+      if (previousStatus !== r.status) logActivity('booking.confirmed', r.booking_reference, 'Booking status ' + previousStatus + ' → ' + r.status + ' after payment step.');
       return respond({ payment: payment, reservation: withRoom(r) });
     },
 
@@ -718,12 +917,31 @@
 
     // BACKEND INTEGRATION: POST email + password to login.php; PHP verifies
     // with password_verify(), starts the session and returns the user/role.
+    // NFR-11 (DEMO): after 5 consecutive failed sign-ins in this browser,
+    // sign-in is locked for 5 minutes. Stored in localStorage, so it is a
+    // demonstration only — real lockout/rate limiting must be server-side.
     authenticate: function (email, password) {
+      var now = Date.now();
+      var guard = readLoginGuard();
+      if (guard.locked_until > now) {
+        var minutes = Math.ceil((guard.locked_until - now) / 60000);
+        return fail('Too many failed sign-in attempts. Demo sign-in is locked — try again in ' + HRS.format.plural(minutes, 'minute') + '.', 'password', { locked: true, locked_until: guard.locked_until });
+      }
+      if (guard.locked_until) guard = { failures: 0, locked_until: 0 }; // lock expired
       var user = state.users.filter(function (u) { return u.email.toLowerCase() === String(email).trim().toLowerCase(); })[0];
       // Same message for unknown email and wrong password (no account enumeration)
       if (!user || !user.password_hash || user.password_hash !== demoPasswordHash(email, password)) {
-        return fail('Incorrect email or password. Check the demo credentials below.', 'password');
+        guard.failures += 1;
+        if (guard.failures >= LOGIN_POLICY.max_attempts) {
+          var until = now + LOGIN_POLICY.lock_minutes * 60000;
+          writeLoginGuard({ failures: 0, locked_until: until });
+          return fail('Too many failed sign-in attempts. Demo sign-in is locked for ' + LOGIN_POLICY.lock_minutes + ' minutes.', 'password', { locked: true, locked_until: until });
+        }
+        writeLoginGuard(guard);
+        var left = LOGIN_POLICY.max_attempts - guard.failures;
+        return fail('Incorrect email or password. ' + HRS.format.plural(left, 'attempt') + ' left before sign-in is locked for ' + LOGIN_POLICY.lock_minutes + ' minutes.', 'password');
       }
+      writeLoginGuard({ failures: 0, locked_until: 0 }); // success resets the counter
       return respond(publicUser(user));
     },
 

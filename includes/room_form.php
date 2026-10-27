@@ -66,7 +66,7 @@
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label class="form-label required" for="r-price">Price per night (USD)</label>
+                                        <label class="form-label required" for="r-price">Price per night (<span data-currency-code>EGP</span>)</label>
                                         <input class="form-control" type="number" id="r-price" name="price_per_night" required min="20" max="10000" step="5">
                                         <p class="form-help" data-region="base-rate-hint"></p>
                                     </div>

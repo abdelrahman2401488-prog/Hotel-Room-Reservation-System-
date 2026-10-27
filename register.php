@@ -58,9 +58,10 @@ require __DIR__ . '/includes/header.php';
                     </div>
                     <div class="form-group">
                         <label class="form-check" for="reg-terms">
-                            <input type="checkbox" id="reg-terms" name="terms" value="1" required data-error-required="Please accept the terms to continue.">
-                            I agree to the terms and privacy policy
+                            <input type="checkbox" id="reg-terms" name="terms" value="1" required data-error-required="Please accept the terms to continue." aria-describedby="reg-privacy-help">
+                            <span>I agree to the terms and the <a href="privacy.php" target="_blank" rel="noopener">privacy policy</a></span>
                         </label>
+                        <p class="form-help" id="reg-privacy-help">Read the <a href="privacy.php" target="_blank" rel="noopener">Privacy Policy</a> (opens in a new tab) to see what this demo stores and where.</p>
                     </div>
                     <button class="btn btn-accent btn-block btn-lg" type="submit">Create account</button>
                 </form>

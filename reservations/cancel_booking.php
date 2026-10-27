@@ -25,7 +25,7 @@ require __DIR__ . '/../includes/header.php';
                 </section>
 
                 <section class="alert alert-info" aria-label="Cancellation policy">
-                    <span><strong>Cancellation policy.</strong> Free cancellation until 48 hours before check-in (14:00). After that, the first night is charged. Refunds go back to the original payment method.</span>
+                    <span><strong>Cancellation policy.</strong> Free cancellation until 48 hours before check-in (<span data-setting="check_in_time">14:00</span>). After that, the first night is charged. Refunds go back to the original payment method.</span>
                 </section>
 
                 <!-- BACKEND INTEGRATION: POST to this page; PHP recalculates the

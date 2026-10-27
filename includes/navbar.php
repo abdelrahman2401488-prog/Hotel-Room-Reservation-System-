@@ -35,6 +35,7 @@
                 <li data-nav="staff admin" hidden><a class="navbar-link" href="<?= $baseUrl ?>reservations/manage_bookings.php">Reservations</a></li>
                 <li data-nav="staff admin" hidden><a class="navbar-link" href="<?= $baseUrl ?>reports/booking_reports.php">Reports</a></li>
 
+                <li><button class="btn btn-ghost btn-sm" type="button" data-action="toggle-language" data-no-i18n lang="ar" aria-label="التبديل إلى العربية">العربية</button></li>
                 <li data-nav="public"><a class="navbar-link" href="<?= $baseUrl ?>login.php">Sign in</a></li>
                 <li data-nav="public"><a class="btn btn-accent btn-sm" href="<?= $baseUrl ?>register.php">Register</a></li>
                 <li data-nav="guest staff admin" hidden>

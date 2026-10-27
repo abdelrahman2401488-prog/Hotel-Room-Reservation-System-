@@ -79,15 +79,18 @@
   HRS.pages['manage-rooms'] = function () {
     var form = qs('[data-form="room-admin-filters"]');
     var tbody = qs('[data-region="room-rows"]');
+    // NFR-19: 10 rooms per page; filters go back to page 1
+    var pager = HRS.ui.pager('[data-region="pager"]', { pageSize: 10, onChange: render });
 
     function render() {
       return HRS.data.getRooms(HRS.validation.serialize(form)).then(function (rooms) {
         qs('[data-region="row-count"]').textContent = HRS.format.plural(rooms.length, 'room') + ' (demo data).';
+        var pageRows = pager.slice(rooms);
         if (!rooms.length) {
           HRS.dom.render(tbody, html`<tr><td colspan="6" class="table-empty">No rooms match these filters.</td></tr>`);
           return;
         }
-        HRS.dom.render(tbody, rooms.map(function (room) {
+        HRS.dom.render(tbody, pageRows.map(function (room) {
           return html`<tr>
               <td><div class="flex items-center gap-3">
                 ${HRS.views.roomMedia(room, 'room-media-table', { label: false })}
@@ -137,9 +140,10 @@
       }).catch(function (error) { HRS.ui.toast(error.message, { type: 'error', title: 'Cannot delete room' }); });
     });
 
-    form.addEventListener('input', render);
-    form.addEventListener('reset', function () { setTimeout(render, 0); });
-    form.addEventListener('submit', function (event) { event.preventDefault(); render(); });
+    function refilter() { pager.reset(); return render(); }
+    form.addEventListener('input', refilter);
+    form.addEventListener('reset', function () { setTimeout(refilter, 0); });
+    form.addEventListener('submit', function (event) { event.preventDefault(); refilter(); });
     return render();
   };
 
@@ -487,6 +491,25 @@
       return Promise.all([renderRates(), renderRules()]).then(renderPreview);
     }
 
+    // NFR-23: hotel settings (check-in/out times, currency)
+    var settingsForm = qs('[data-form="hotel-settings"]');
+    HRS.data.getSettings().then(function (s) {
+      settingsForm.elements.check_in_time.value = s.check_in_time;
+      settingsForm.elements.check_out_time.value = s.check_out_time;
+      settingsForm.elements.currency.value = s.currency;
+    });
+    HRS.validation.attach(settingsForm, {
+      onSubmit: function (values, form, submit) {
+        HRS.ui.setLoading(submit, true, 'Saving…');
+        return HRS.data.saveSettings(values).then(function (s) {
+          HRS.ui.setLoading(submit, false);
+          HRS.dom.qsa('[data-currency-code]').forEach(function (el) { el.textContent = s.currency; });
+          HRS.ui.toast('Settings saved (demo, this browser): check-in ' + s.check_in_time + ', check-out ' + s.check_out_time + ', prices in ' + s.currency + '.', { type: 'success' });
+          return refreshAll();
+        });
+      }
+    });
+
     function openRule(rule) {
       HRS.validation.reset(ruleForm);
       qs('#rule-modal-title').textContent = rule ? 'Edit seasonal rule' : 'New seasonal rule';
@@ -558,5 +581,48 @@
       }), String((rooms.filter(function (r) { return r.room_type === 'suite'; })[0] || rooms[0]).room_id));
       renderPreview();
     });
+  };
+
+  /* ---------------- Activity log (NFR-26) ---------------- */
+
+  var ACTION_BADGES = { price: 'badge-accent', booking: 'badge-primary', payment: 'badge-info' };
+
+  HRS.pages['activity-log'] = function () {
+    var form = qs('[data-form="activity-filters"]');
+    var tbody = qs('[data-region="activity-rows"]');
+    var entries = [];
+    var pager = HRS.ui.pager('[data-region="pager"]', { pageSize: 20, onChange: renderRows });
+
+    function renderRows() {
+      var pageRows = pager.slice(entries);
+      qs('[data-region="row-count"]').textContent = HRS.format.plural(entries.length, 'entry') + ' (demo, stored in this browser).';
+      if (!entries.length) {
+        HRS.dom.render(tbody, html`<tr><td colspan="5" class="table-empty">
+            <strong>No activity recorded yet.</strong><br>Price changes, bookings and payments made in the demo will appear here.</td></tr>`);
+        return;
+      }
+      HRS.dom.render(tbody, pageRows.map(function (e) {
+        var when = new Date(e.created_at);
+        var category = e.action.split('.')[0];
+        return html`<tr>
+            <td class="text-nowrap"><time datetime="${e.created_at}">${HRS.format.date(HRS.date.toISO(when))} ${when.toLocaleTimeString(HRS.config.locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time></td>
+            <td><span class="badge ${ACTION_BADGES[category] || ''}">${HRS.format.label(e.action.replace('.', ' '))}</span></td>
+            <td class="font-mono text-nowrap">${e.reference}</td>
+            <td>${e.description}</td>
+            <td><div>${e.actor}</div><div class="text-xs text-muted">${HRS.format.label(e.actor_role)}</div></td>
+          </tr>`;
+      }));
+    }
+
+    function load() {
+      return HRS.data.getActivityLog(HRS.validation.serialize(form)).then(function (list) {
+        entries = list;
+        renderRows();
+      });
+    }
+
+    form.addEventListener('change', function () { pager.reset(); load(); });
+    form.addEventListener('submit', function (event) { event.preventDefault(); });
+    return load();
   };
 })(window.HRS);

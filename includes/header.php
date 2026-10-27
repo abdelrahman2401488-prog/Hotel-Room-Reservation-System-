@@ -44,6 +44,8 @@ $pageRoles   = $pageRoles ?? '';
     <link rel="icon" type="image/png" sizes="32x32" href="<?= $baseUrl ?>assets/images/brand/favicon-32.png">
     <link rel="apple-touch-icon" href="<?= $baseUrl ?>assets/images/brand/apple-touch-icon.png">
     <link rel="stylesheet" href="<?= $baseUrl ?>assets/css/global.css">
+    <!-- NFR-17: sets lang/dir (English or Arabic RTL) before the page paints -->
+    <script src="<?= $baseUrl ?>assets/js/i18n.js"></script>
 </head>
 <body data-page="<?= htmlspecialchars($pageId) ?>" data-roles="<?= htmlspecialchars($pageRoles) ?>" data-base-url="<?= $baseUrl ?>">
     <a class="skip-link" href="#main">Skip to content</a>

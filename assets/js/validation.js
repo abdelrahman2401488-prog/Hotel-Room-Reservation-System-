@@ -126,7 +126,7 @@
     if (field.type === 'date') {
       if (!HRS.date.parse(value)) return 'Enter a valid date.';
       if (field.min && value < field.min) return name + ' cannot be before ' + HRS.format.date(field.min) + '.';
-      if (field.max && value > field.max) return name + ' cannot be after ' + HRS.format.date(field.max) + '.';
+      if (field.max && value > field.max) return field.dataset.errorMax || name + ' cannot be after ' + HRS.format.date(field.max) + '.';
     }
 
     var ruleNames = (field.dataset.rule || '').split(/\s+/).filter(Boolean);

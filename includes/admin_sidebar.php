@@ -23,5 +23,6 @@
                 <li><a class="sidebar-link" href="<?= $baseUrl ?>reports/booking_reports.php">Booking reports</a></li>
                 <li><a class="sidebar-link" href="<?= $baseUrl ?>reports/revenue_reports.php">Revenue reports</a></li>
                 <li><a class="sidebar-link" href="<?= $baseUrl ?>reviews/list_reviews.php">Reviews</a></li>
+                <li><a class="sidebar-link" href="<?= $baseUrl ?>admin/activity_log.php">Activity log</a></li>
             </ul>
         </aside>

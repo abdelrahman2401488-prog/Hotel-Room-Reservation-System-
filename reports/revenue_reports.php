@@ -77,6 +77,7 @@ require __DIR__ . '/../includes/header.php';
                         <tbody data-region="report-rows"></tbody>
                     </table>
                 </div>
+                <div data-region="pager"></div>
             </div>
         </div>
     </div>
